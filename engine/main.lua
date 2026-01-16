@@ -1,5 +1,5 @@
 -- engine/main.lua
--- === LUA OBFUSCATOR ENGINE V2 (FIXED) ===
+-- === LUA OBFUSCATOR ENGINE V2 (FULLY FIXED) ===
 
 package.path = package.path .. ";./?.lua;./engine/?.lua;/app/engine/?.lua"
 
@@ -27,9 +27,9 @@ local function generateRandomName()
 end
 
 local function generateJunkName()
-    local prefixes = {"_G", "_V", "_X", "_Z", "_Q", "_W"}
+    local prefixes = {"_jnk", "_var", "_tmp", "_dat", "_val"}
     local name = prefixes[math.random(1, #prefixes)]
-    for i = 1, math.random(5, 10) do
+    for i = 1, math.random(5, 8) do
         name = name .. string.char(math.random(97, 122))
     end
     return name
@@ -62,7 +62,7 @@ local function obfuscateNumber(numStr)
     if n == 0 then return "(1-1)" end
     if n == 1 then return "(2-1)" end
     
-    local method = math.random(1, 4)
+    local method = math.random(1, 3)
     
     if method == 1 then
         local a = math.random(1, 500)
@@ -70,35 +70,22 @@ local function obfuscateNumber(numStr)
     elseif method == 2 then
         local a = math.random(1, 500)
         return "(" .. (n + a) .. "-" .. a .. ")"
-    elseif method == 3 then
-        local a = math.random(10, 100)
-        local b = math.random(10, 100)
-        return "((" .. n .. "+" .. a .. ")-" .. a .. ")"
     else
         return "(" .. math.floor(n/2) .. "+" .. (n - math.floor(n/2)) .. ")"
     end
 end
 
 local function generateJunkCode()
-    local method = math.random(1, 4)
+    local method = math.random(1, 3)
+    local v = generateJunkName()
+    local n = math.random(100, 999)
     
     if method == 1 then
-        local v1 = generateJunkName()
-        local n1 = math.random(100, 999)
-        return "local " .. v1 .. "=" .. n1 .. "; "
+        return "local " .. v .. " = " .. n .. " "
     elseif method == 2 then
-        local v = generateJunkName()
-        local n1 = math.random(1, 5)
-        local n2 = math.random(1, 3)
-        return "local " .. v .. "={}; for _=" .. n1 .. "," .. n2 .. " do end; "
-    elseif method == 3 then
-        local v = generateJunkName()
-        local n1 = math.random(100, 500)
-        local n2 = math.random(501, 999)
-        return "local " .. v .. "=(" .. n1 .. "<" .. n2 .. ") and " .. n1 .. " or " .. n2 .. "; "
+        return "local " .. v .. " = " .. n .. " + " .. math.random(1, 100) .. " "
     else
-        local v = generateJunkName()
-        return "local " .. v .. "=(function() return " .. math.random(1, 999) .. " end)(); "
+        return "local " .. v .. " = (" .. n .. " > 0) and " .. n .. " or 0 "
     end
 end
 
@@ -114,7 +101,7 @@ function Unparser:new()
         encryptionKey = math.random(50, 200),
         output = "",
         junkCounter = 0,
-        junkInterval = math.random(4, 7)
+        junkInterval = math.random(5, 8)
     }
     setmetatable(obj, self)
     self.__index = self
@@ -129,7 +116,7 @@ function Unparser:maybeInsertJunk()
     self.junkCounter = self.junkCounter + 1
     if self.junkCounter >= self.junkInterval then
         self.junkCounter = 0
-        self.junkInterval = math.random(4, 7)
+        self.junkInterval = math.random(5, 8)
         self:emit(generateJunkCode())
     end
 end
@@ -189,8 +176,13 @@ function Unparser:getNewVarName(oldName)
         ["listfiles"] = true, ["isfile"] = true, ["isfolder"] = true,
         ["makefolder"] = true, ["delfolder"] = true, ["delfile"] = true,
         ["getgc"] = true, ["queue_on_teleport"] = true,
-        ["DEC"] = true, ["_XOR"] = true,
+        ["DECRYPT_STR"] = true, ["XOR_BYTE"] = true,
         ["true"] = true, ["false"] = true, ["nil"] = true,
+        ["and"] = true, ["or"] = true, ["not"] = true,
+        ["if"] = true, ["then"] = true, ["else"] = true, ["elseif"] = true,
+        ["end"] = true, ["do"] = true, ["while"] = true, ["for"] = true,
+        ["in"] = true, ["repeat"] = true, ["until"] = true,
+        ["function"] = true, ["local"] = true, ["return"] = true, ["break"] = true,
     }
     
     if globals[oldName] then
@@ -213,7 +205,7 @@ function Unparser:encryptString(str)
     for i, v in ipairs(encrypted) do
         table.insert(parts, tostring(v))
     end
-    return "DEC({" .. table.concat(parts, ",") .. "}," .. self.encryptionKey .. ")"
+    return "DECRYPT_STR({" .. table.concat(parts, ",") .. "}," .. self.encryptionKey .. ")"
 end
 
 function Unparser:processNode(node)
@@ -232,39 +224,39 @@ function Unparser:processNode(node)
         for i, var in ipairs(node.LocalList) do
             local newName = self:getNewVarName(var.Name)
             self:emit(newName)
-            if i < #node.LocalList then self:emit(",") end
+            if i < #node.LocalList then self:emit(", ") end
         end
         if #node.InitList > 0 then
-            self:emit("=")
+            self:emit(" = ")
             for i, expr in ipairs(node.InitList) do
                 self:processNode(expr)
-                if i < #node.InitList then self:emit(",") end
+                if i < #node.InitList then self:emit(", ") end
             end
         end
-        self:emit("; ")
+        self:emit(" ")
     
     elseif t == "AssignmentStatement" then
         for i, lhs in ipairs(node.Lhs) do
             self:processNode(lhs)
-            if i < #node.Lhs then self:emit(",") end
+            if i < #node.Lhs then self:emit(", ") end
         end
-        self:emit("=")
+        self:emit(" = ")
         for i, rhs in ipairs(node.Rhs) do
             self:processNode(rhs)
-            if i < #node.Rhs then self:emit(",") end
+            if i < #node.Rhs then self:emit(", ") end
         end
-        self:emit("; ")
+        self:emit(" ")
     
     elseif t == "CallStatement" then
         self:processNode(node.Expression)
-        self:emit("; ")
+        self:emit(" ")
     
     elseif t == "CallExpr" then
         self:processNode(node.Base)
         self:emit("(")
         for i, arg in ipairs(node.Arguments) do
             self:processNode(arg)
-            if i < #node.Arguments then self:emit(",") end
+            if i < #node.Arguments then self:emit(", ") end
         end
         self:emit(")")
     
@@ -306,7 +298,7 @@ function Unparser:processNode(node)
     
     elseif t == "NumberExpr" then
         local numVal = node.Value.Data
-        if numVal:match("^%d+$") then
+        if numVal:match("^%d+$") and tonumber(numVal) < 10000 then
             self:emit(obfuscateNumber(numVal))
         else
             self:emit(numVal)
@@ -314,17 +306,9 @@ function Unparser:processNode(node)
     
     elseif t == "BooleanExpr" then
         if node.Value then
-            if math.random(1, 2) == 1 then
-                self:emit("(1==1)")
-            else
-                self:emit("true")
-            end
+            self:emit("true")
         else
-            if math.random(1, 2) == 1 then
-                self:emit("(1==0)")
-            else
-                self:emit("false")
-            end
+            self:emit("false")
         end
     
     elseif t == "NilExpr" then
@@ -378,10 +362,10 @@ function Unparser:processNode(node)
         for i, arg in ipairs(node.Arguments) do
             local newName = self:getNewVarName(arg.Name)
             self:emit(newName)
-            if i < #node.Arguments then self:emit(",") end
+            if i < #node.Arguments then self:emit(", ") end
         end
         if node.VarArg then
-            if #node.Arguments > 0 then self:emit(",") end
+            if #node.Arguments > 0 then self:emit(", ") end
             self:emit("...")
         end
         self:emit(") ")
@@ -415,12 +399,12 @@ function Unparser:processNode(node)
     elseif t == "NumericForStatement" then
         self:emit("for ")
         local newVar = self:getNewVarName(node.Variable.Name)
-        self:emit(newVar .. "=")
+        self:emit(newVar .. " = ")
         self:processNode(node.Start)
-        self:emit(",")
+        self:emit(", ")
         self:processNode(node.End)
         if node.Step then
-            self:emit(",")
+            self:emit(", ")
             self:processNode(node.Step)
         end
         self:emit(" do ")
@@ -432,12 +416,12 @@ function Unparser:processNode(node)
         for i, var in ipairs(node.VariableList) do
             local newName = self:getNewVarName(var.Name)
             self:emit(newName)
-            if i < #node.VariableList then self:emit(",") end
+            if i < #node.VariableList then self:emit(", ") end
         end
         self:emit(" in ")
         for i, gen in ipairs(node.Generators) do
             self:processNode(gen)
-            if i < #node.Generators then self:emit(",") end
+            if i < #node.Generators then self:emit(", ") end
         end
         self:emit(" do ")
         self:processNode(node.Body)
@@ -459,7 +443,7 @@ function Unparser:processNode(node)
         self:emit("return ")
         for i, arg in ipairs(node.Arguments) do
             self:processNode(arg)
-            if i < #node.Arguments then self:emit(",") end
+            if i < #node.Arguments then self:emit(", ") end
         end
         self:emit(" ")
     
@@ -472,15 +456,15 @@ function Unparser:processNode(node)
             if entry.Type == "Key" then
                 self:emit("[")
                 self:processNode(entry.Key)
-                self:emit("]=")
+                self:emit("] = ")
                 self:processNode(entry.Value)
             elseif entry.Type == "KeyString" then
-                self:emit(entry.Key .. "=")
+                self:emit(entry.Key .. " = ")
                 self:processNode(entry.Value)
             else
                 self:processNode(entry.Value)
             end
-            if i < #node.EntryList then self:emit(",") end
+            if i < #node.EntryList then self:emit(", ") end
         end
         self:emit("}")
     
@@ -499,10 +483,30 @@ function Unparser:processNode(node)
 end
 
 -- ============================================
--- BAGIAN 3: RUNTIME DECRYPTOR
+-- BAGIAN 3: RUNTIME DECRYPTOR (FIXED - PROPER FORMATTING)
 -- ============================================
 
-local RUNTIME_CODE = [[local function _XOR(a,b) local r,m=0,1 while a>0 or b>0 do local x,y=a%2,b%2 if x~=y then r=r+m end a,b=math.floor(a/2),math.floor(b/2) m=m*2 end return r end local function DEC(t,k) local r={} for i=1,#t do r[i]=string.char(_XOR(t[i],k)) end return table.concat(r) end ]]
+local function getRuntimeCode()
+    local runtime = ""
+    runtime = runtime .. "local function XOR_BYTE(a, b) "
+    runtime = runtime .. "local r, m = 0, 1 "
+    runtime = runtime .. "while a > 0 or b > 0 do "
+    runtime = runtime .. "local x, y = a % 2, b % 2 "
+    runtime = runtime .. "if x ~= y then r = r + m end "
+    runtime = runtime .. "a, b = math.floor(a / 2), math.floor(b / 2) "
+    runtime = runtime .. "m = m * 2 "
+    runtime = runtime .. "end "
+    runtime = runtime .. "return r "
+    runtime = runtime .. "end "
+    runtime = runtime .. "local function DECRYPT_STR(t, k) "
+    runtime = runtime .. "local r = {} "
+    runtime = runtime .. "for i = 1, #t do "
+    runtime = runtime .. "r[i] = string.char(XOR_BYTE(t[i], k)) "
+    runtime = runtime .. "end "
+    runtime = runtime .. "return table.concat(r) "
+    runtime = runtime .. "end "
+    return runtime
+end
 
 -- ============================================
 -- BAGIAN 4: JUNK PREFIX
@@ -510,7 +514,7 @@ local RUNTIME_CODE = [[local function _XOR(a,b) local r,m=0,1 while a>0 or b>0 d
 
 local function generateJunkPrefix()
     local junk = ""
-    for i = 1, math.random(3, 5) do
+    for i = 1, math.random(2, 4) do
         junk = junk .. generateJunkCode()
     end
     return junk
@@ -545,10 +549,8 @@ end
 local unparser = Unparser:new()
 unparser:processNode(ast)
 
+local runtimeCode = getRuntimeCode()
 local junkPrefix = generateJunkPrefix()
-local finalCode = RUNTIME_CODE .. junkPrefix .. unparser.output
-
-finalCode = finalCode:gsub("\n+", " ")
-finalCode = finalCode:gsub("  +", " ")
+local finalCode = runtimeCode .. junkPrefix .. unparser.output
 
 print(finalCode)
