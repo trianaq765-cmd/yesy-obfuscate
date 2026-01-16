@@ -10,17 +10,16 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 RUN mkdir -p engine
 
-# Download Parser
+# Download Parser saja
 RUN wget -O engine/parser.lua https://raw.githubusercontent.com/stravant/LuaMinify/master/ParseLua.lua
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy semua file termasuk engine/strict.lua buatan kita
 COPY . .
 
-# --- TAMBAHAN PENTING ---
-# Memberitahu Lua untuk mencari modul di folder /app/engine/?.lua
-ENV LUA_PATH="/app/engine/?.lua;;"
+ENV LUA_PATH="/app/engine/?.lua;./engine/?.lua;;"
 
 EXPOSE 8080
 CMD ["python", "bot.py"]
