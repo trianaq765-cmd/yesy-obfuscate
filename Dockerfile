@@ -11,18 +11,15 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 RUN mkdir -p engine
 
-# Download Parser
+# Download Parser Stravant
 RUN wget -O engine/parser.lua https://raw.githubusercontent.com/stravant/LuaMinify/master/ParseLua.lua
 
-# Copy requirements & Install Python Libs
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy sisa file
 COPY . .
 
-# Environment Variable Dummy (Nanti ditimpa saat run)
-ENV DISCORD_TOKEN="ganti_token_saat_run"
+# Render akan otomatis membaca port 8080 dari Flask
+EXPOSE 8080
 
-# Jalankan Bot Python
 CMD ["python", "bot.py"]
