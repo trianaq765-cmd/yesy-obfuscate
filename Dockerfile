@@ -16,10 +16,10 @@ RUN wget -O engine/parser.lua https://raw.githubusercontent.com/stravant/LuaMini
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy semua file termasuk engine/strict.lua buatan kita
+# Copy SEMUA file (termasuk engine/strict.lua yang sudah Anda buat)
 COPY . .
 
-ENV LUA_PATH="/app/engine/?.lua;./engine/?.lua;;"
+ENV LUA_PATH="/app/engine/?.lua;./engine/?.lua;/app/?.lua;;"
 
 EXPOSE 8080
 CMD ["python", "bot.py"]
