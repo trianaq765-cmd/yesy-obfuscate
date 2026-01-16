@@ -1,5 +1,5 @@
 -- engine/main.lua
--- === LUA OBFUSCATOR ENGINE V1 ===
+-- === LUA OBFUSCATOR ENGINE V1 (FIXED) ===
 -- Fitur: Variable Renaming + String Encryption
 
 package.path = package.path .. ";./?.lua;./engine/?.lua;/app/engine/?.lua"
@@ -25,7 +25,6 @@ local function xorEncrypt(str, key)
     local result = {}
     for i = 1, #str do
         local byte = string.byte(str, i)
-        -- Manual XOR untuk Lua 5.1
         local xored = 0
         local pow = 1
         local a, b = byte, key
@@ -49,8 +48,8 @@ local Unparser = {}
 
 function Unparser:new()
     local obj = {
-        varMap = {},       -- Menyimpan nama lama -> nama baru
-        encryptionKey = math.random(50, 200), -- Key XOR random
+        varMap = {},
+        encryptionKey = math.random(50, 200),
         output = ""
     }
     setmetatable(obj, self)
@@ -63,7 +62,6 @@ function Unparser:emit(str)
 end
 
 function Unparser:getNewVarName(oldName)
-    -- Jangan rename variabel global (print, game, workspace, dll)
     local globals = {
         ["print"] = true, ["game"] = true, ["workspace"] = true,
         ["script"] = true, ["math"] = true, ["string"] = true,
@@ -82,6 +80,8 @@ function Unparser:getNewVarName(oldName)
         ["CFrame"] = true, ["Color3"] = true, ["UDim2"] = true,
         ["Enum"] = true, ["task"] = true, ["true"] = true,
         ["false"] = true, ["nil"] = true, ["DEC"] = true,
+        ["_XOR"] = true, ["warn"] = true, ["getfenv"] = true,
+        ["setfenv"] = true, ["loadfile"] = true, ["dofile"] = true,
     }
     
     if globals[oldName] then
@@ -105,19 +105,18 @@ function Unparser:encryptString(str)
     return "DEC(" .. numStr .. "," .. self.encryptionKey .. ")"
 end
 
--- Proses setiap tipe Node AST
 function Unparser:processNode(node)
     if not node then return end
     
     local t = node.AstType
     
-    -- STATLIST (Daftar statement)
+    -- STATLIST
     if t == "Statlist" then
         for _, stmt in ipairs(node.Body) do
             self:processNode(stmt)
         end
     
-    -- LOCAL STATEMENT (local x = ...)
+    -- LOCAL STATEMENT
     elseif t == "LocalStatement" then
         self:emit("local ")
         for i, var in ipairs(node.LocalList) do
@@ -132,9 +131,9 @@ function Unparser:processNode(node)
                 if i < #node.InitList then self:emit(",") end
             end
         end
-        self:emit(";")
+        self:emit("; ")
     
-    -- ASSIGNMENT (x = ...)
+    -- ASSIGNMENT
     elseif t == "AssignmentStatement" then
         for i, lhs in ipairs(node.Lhs) do
             self:processNode(lhs)
@@ -145,12 +144,12 @@ function Unparser:processNode(node)
             self:processNode(rhs)
             if i < #node.Rhs then self:emit(",") end
         end
-        self:emit(";")
+        self:emit("; ")
     
-    -- CALL STATEMENT (print(...))
+    -- CALL STATEMENT
     elseif t == "CallStatement" then
         self:processNode(node.Expression)
-        self:emit(";")
+        self:emit("; ")
     
     -- CALL EXPRESSION
     elseif t == "CallExpr" then
@@ -162,8 +161,18 @@ function Unparser:processNode(node)
         end
         self:emit(")")
     
-    -- STRING CALL (print "hello")
+    -- STRING CALL
     elseif t == "StringCallExpr" then
+        self:processNode(node.Base)
+        self:emit("(")
+        for i, arg in ipairs(node.Arguments) do
+            self:processNode(arg)
+            if i < #node.Arguments then self:emit(",") end
+        end
+        self:emit(")")
+    
+    -- TABLE CALL
+    elseif t == "TableCallExpr" then
         self:processNode(node.Base)
         self:emit("(")
         for i, arg in ipairs(node.Arguments) do
@@ -177,13 +186,13 @@ function Unparser:processNode(node)
         local newName = self:getNewVarName(node.Name)
         self:emit(newName)
     
-    -- MEMBER EXPRESSION (a.b atau a:b)
+    -- MEMBER EXPRESSION
     elseif t == "MemberExpr" then
         self:processNode(node.Base)
-        self:emit(node.Indexer) -- . atau :
+        self:emit(node.Indexer)
         self:emit(node.Ident.Data)
     
-    -- INDEX EXPRESSION (a[b])
+    -- INDEX EXPRESSION
     elseif t == "IndexExpr" then
         self:processNode(node.Base)
         self:emit("[")
@@ -214,24 +223,43 @@ function Unparser:processNode(node)
         self:processNode(node.Inner)
         self:emit(")")
     
-    -- BINARY OPERATION (a + b)
+    -- BINARY OPERATION
     elseif t == "BinopExpr" then
         self:processNode(node.Lhs)
         self:emit(" " .. node.Op .. " ")
         self:processNode(node.Rhs)
     
-    -- UNARY OPERATION (-a, not a, #a)
+    -- UNARY OPERATION
     elseif t == "UnopExpr" then
-        self:emit(node.Op .. " ")
+        if node.Op == "not" then
+            self:emit("not ")
+        else
+            self:emit(node.Op)
+        end
         self:processNode(node.Rhs)
     
-    -- FUNCTION DEFINITION
+    -- FUNCTION DEFINITION (FIXED!)
     elseif t == "Function" then
         if node.IsLocal then
-            self:emit("function")
+            if node.Name then
+                -- local function namaFungsi(...)
+                self:emit("local function ")
+                if type(node.Name) == "table" and node.Name.Name then
+                    local newName = self:getNewVarName(node.Name.Name)
+                    self:emit(newName)
+                else
+                    self:processNode(node.Name)
+                end
+            else
+                -- Anonymous function: function(...)
+                self:emit("function")
+            end
         else
+            -- Global function: function name(...)
             self:emit("function ")
-            self:processNode(node.Name)
+            if node.Name then
+                self:processNode(node.Name)
+            end
         end
         self:emit("(")
         for i, arg in ipairs(node.Arguments) do
@@ -243,9 +271,9 @@ function Unparser:processNode(node)
             if #node.Arguments > 0 then self:emit(",") end
             self:emit("...")
         end
-        self:emit(")")
+        self:emit(") ")
         self:processNode(node.Body)
-        self:emit(" end ")
+        self:emit("end ")
     
     -- IF STATEMENT
     elseif t == "IfStatement" then
@@ -289,7 +317,7 @@ function Unparser:processNode(node)
         self:processNode(node.Body)
         self:emit("end ")
     
-    -- GENERIC FOR LOOP (for k,v in pairs(...))
+    -- GENERIC FOR LOOP
     elseif t == "GenericForStatement" then
         self:emit("for ")
         for i, var in ipairs(node.VariableList) do
@@ -352,17 +380,13 @@ function Unparser:processNode(node)
         end
         self:emit("}")
     
-    -- DOTS (...)
+    -- DOTS
     elseif t == "DotsExpr" then
         self:emit("...")
     
     -- EOF
     elseif t == "Eof" then
-        -- Tidak perlu apa-apa
-    
-    else
-        -- Fallback untuk tipe yang belum dihandle
-        -- self:emit("--[[UNKNOWN:" .. tostring(t) .. "]]")
+        -- Nothing
     end
 end
 
