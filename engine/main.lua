@@ -1,56 +1,54 @@
--- engine/main.lua (Versi Debug Sederhana)
+-- engine/main.lua
 
--- Fix path untuk require
-package.path = package.path .. ";./engine/?.lua;/app/engine/?.lua"
+-- 1. Setup Path (Agar Lua menemukan parser di folder yang sama)
+-- Kita tambah "./?.lua" dan "/app/engine/?.lua"
+package.path = package.path .. ";./?.lua;./engine/?.lua;/app/engine/?.lua"
 
-print("-- [DEBUG] Script Lua dimulai...")
+-- 2. Load Parser (Yang sudah Full Version)
+local status_lib, parser = pcall(require, "parser")
 
--- Cek argumen
+if not status_lib then
+    print("[FATAL ERROR] Parser tidak bisa di-load!")
+    print("Error: " .. tostring(parser))
+    return
+end
+
+-- 3. Baca File Input dari Python
 local filename = arg[1]
 if not filename then
-    print("-- [ERROR] Tidak ada file input")
+    print("[ERROR] Tidak ada input file.")
     return
 end
 
-print("-- [DEBUG] File input: " .. filename)
-
--- Baca file
 local f = io.open(filename, "rb")
 if not f then
-    print("-- [ERROR] Gagal buka file: " .. filename)
+    print("[ERROR] Gagal membuka file.")
     return
 end
-
 local code = f:read("*a")
 f:close()
 
-print("-- [DEBUG] Berhasil baca file, ukuran: " .. #code .. " bytes")
+print("[-] Memproses file: " .. filename)
+print("[-] Ukuran kode: " .. #code .. " bytes")
 
--- Coba load parser
-print("-- [DEBUG] Loading parser...")
-local ok, parser = pcall(require, "parser")
-if not ok then
-    print("-- [ERROR] Gagal load parser:")
-    print(parser)
-    return
-end
-
-print("-- [DEBUG] Parser loaded!")
-
--- Coba parse
-print("-- [DEBUG] Parsing code...")
-local ok2, ast = pcall(function()
+-- 4. EKSEKUSI PARSING
+local status, ast = pcall(function()
     return parser.ParseLua(code)
 end)
 
-if not ok2 then
-    print("-- [ERROR] Gagal parse:")
+if status then
+    print("\n✅ [SUKSES] PARSING BERHASIL!")
+    print("-------------------------------------------------")
+    print("Struktur kode berhasil dibaca komputer.")
+    print("Tipe AST Root: " .. tostring(ast.AstType)) -- Harusnya "Statlist"
+    print("Jumlah Statement: " .. #ast.Body)
+    print("-------------------------------------------------")
+    
+    -- Cetak ulang kode asli sebagai bukti output tidak error
+    print("\n-- [OUTPUT SEMENTARA: KODE ASLI]")
+    print(code)
+else
+    print("\n❌ [GAGAL] PARSING ERROR")
+    print("Pesan Error:")
     print(ast)
-    return
 end
-
-print("-- [DEBUG] Parse berhasil!")
-print("-- [SUCCESS] Semua berjalan lancar!")
-print("")
-print("-- Output sementara (kode asli):")
-print(code)
