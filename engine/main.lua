@@ -39,21 +39,21 @@ local GLOBALS={
 ["request"]=1,["http_request"]=1,["HttpGet"]=1,["readfile"]=1,
 ["writefile"]=1,["appendfile"]=1,["listfiles"]=1,["isfile"]=1,
 ["isfolder"]=1,["makefolder"]=1,["delfolder"]=1,["delfile"]=1,
-["getgc"]=1,["queue_on_teleport"]=1,["_D"]=1,["_X"]=1,["_C"]=1,
+["getgc"]=1,["queue_on_teleport"]=1,["_"]=1,
 ["true"]=1,["false"]=1,["nil"]=1
 }
 
 local function genName()
 local cs={"I","l","1","_"}
 local n
-repeat n="_" for i=1,math.random(10,16) do n=n..cs[math.random(1,4)] end until not usedNames[n]
+repeat n="_" for i=1,math.random(12,20) do n=n..cs[math.random(1,4)] end until not usedNames[n]
 usedNames[n]=true
 return n
 end
 
 local function genJunkVar()
 local n="_"..string.char(math.random(97,122))
-for i=1,math.random(3,6) do n=n..string.char(math.random(97,122)) end
+for i=1,math.random(4,8) do n=n..string.char(math.random(97,122)) end
 return n
 end
 
@@ -74,70 +74,105 @@ end
 return r
 end
 
+local function encStr(s,k)
+if not s or s=="" then return'""' end
+local enc=xorEnc(s,k)
+local p={}
+for i=1,#enc do p[i]=tostring(enc[i]) end
+return"_._d({"..table.concat(p,",").."},"..k..")"
+end
+
 local function obfNum(ns)
 local n=tonumber(ns)
 if not n then return ns end
 if n~=math.floor(n) then return ns end
 if n<0 or n>50000 then return ns end
-if n==0 then return"(1-1)" end
-if n==1 then return"(2-1)" end
-local m=math.random(1,4)
-local a=math.random(1,100)
-if m==1 then return"("..(n+a).."-"..a..")"
-elseif m==2 then return"("..(n-a).."+"..a..")"
-elseif m==3 then return"(("..(n*2).."-"..n.."))"
-else return"(("..a.."+"..a..")+"..(n-a-a)..")" end
+if n==0 then return"((1)-( 1))" end
+if n==1 then return"((2)-(1))" end
+local m=math.random(1,6)
+local a=math.random(1,200)
+local b=math.random(1,100)
+if m==1 then return"(("..(n+a)..")-("..a.."))"
+elseif m==2 then return"(("..(n-a)..")+("..a.."))"
+elseif m==3 then return"((("..(n*2)..")/2))"
+elseif m==4 then return"(("..a.."+"..(n-a).."))"
+elseif m==5 then return"((("..b.."*"..math.floor(n/b+1)..")-("..(b*math.floor(n/b+1)-n).."))"
+else return"(("..(n+a+b)..")-("..a..")-("..b.."))" end
 end
 
-local function genOpaque(alwaysTrue)
+local function genOpaque(t)
 local a,b=math.random(100,500),math.random(501,999)
-local c=math.random(1,1000)
-if alwaysTrue then
-local m=math.random(1,5)
+if t then
+local m=math.random(1,8)
 if m==1 then return"("..a.."<"..b..")"
 elseif m==2 then return"(("..a.."+"..b..")>"..a..")"
 elseif m==3 then return"(type('')=='string')"
 elseif m==4 then return"(#''==0)"
-else return"((1+1)==2)" end
+elseif m==5 then return"((1+1)==2)"
+elseif m==6 then return"(not not true)"
+elseif m==7 then return"(''=='')"
+else return"(nil==nil)" end
 else
-local m=math.random(1,4)
+local m=math.random(1,6)
 if m==1 then return"("..b.."<"..a..")"
 elseif m==2 then return"(type(1)=='string')"
 elseif m==3 then return"(#''~=0)"
-else return"((1+1)==3)" end
+elseif m==4 then return"((1+1)==3)"
+elseif m==5 then return"(not true)"
+else return"(''~='')" end
 end
 end
 
 local function genJunk()
-local m=math.random(1,5)
+local m=math.random(1,8)
 local v=genJunkVar()
-local n=math.random(100,999)
-if m==1 then return"local "..v.."="..n.." "
-elseif m==2 then return"local "..v.."="..n.."+"..math.random(1,50).." "
-elseif m==3 then return"local "..v.."=("..n..">0) and "..n.." or 0 "
-elseif m==4 then return"local "..v.."=(function() return "..n.." end)() "
-else return"local "..v.."="..genOpaque(true).." and "..n.." or 0 " end
+local n=math.random(100,9999)
+if m==1 then return"local "..v.."="..obfNum(tostring(n)).." "
+elseif m==2 then return"local "..v.."="..obfNum(tostring(n)).."+"..obfNum(tostring(math.random(1,100))).." "
+elseif m==3 then return"local "..v.."="..genOpaque(true).." and "..obfNum(tostring(n)).." or "..obfNum(tostring(0)).." "
+elseif m==4 then return"local "..v.."=(function() return "..obfNum(tostring(n)).." end)() "
+elseif m==5 then return"local "..v.."={} "..v.."["..obfNum(tostring(1)).."]="..obfNum(tostring(n)).." "
+elseif m==6 then return"local "..v.."="..obfNum(tostring(n)).." "..v.."="..v.."+("..obfNum(tostring(math.random(1,50)))..") "
+elseif m==7 then return"local "..v.."="..obfNum(tostring(n)).." if "..genOpaque(false).." then "..v.."="..obfNum(tostring(0)).." end "
+else return"local "..v..";"..v.."="..obfNum(tostring(n)).." " end
 end
 
 local function genOpaqueBlock()
-local m=math.random(1,3)
-if m==1 then return"if "..genOpaque(true).." then "..genJunk().."end "
-elseif m==2 then return"if "..genOpaque(false).." then "..genJunk().."else "..genJunk().."end "
-else return"while "..genOpaque(false).." do "..genJunk().."break end " end
+local m=math.random(1,6)
+if m==1 then return"if "..genOpaque(true).." then "..genJunk()..genJunk().."end "
+elseif m==2 then return"if "..genOpaque(false).." then "..genJunk().."else "..genJunk()..genJunk().."end "
+elseif m==3 then return"while "..genOpaque(false).." do "..genJunk().."break end "
+elseif m==4 then return"do "..genJunk()..genJunk().."end "
+elseif m==5 then return"if "..genOpaque(true).." then if "..genOpaque(true).." then "..genJunk().."end end "
+else return"for _="..obfNum(tostring(1))..","..obfNum(tostring(0)).." do "..genJunk().."end " end
 end
 
 local function genDeadCode()
-local m=math.random(1,3)
+local m=math.random(1,5)
 local v1,v2=genJunkVar(),genJunkVar()
-local n1,n2=math.random(100,999),math.random(100,999)
-if m==1 then return"if "..genOpaque(false).." then local "..v1.."="..n1.." print("..v1..") end "
-elseif m==2 then return"if "..genOpaque(false).." then for "..v1.."=1,"..n1.." do "..v2.."="..n2.." end end "
-else return"if "..genOpaque(false).." then while true do break end end " end
+local n1,n2=math.random(1000,9999),math.random(1000,9999)
+if m==1 then return"if "..genOpaque(false).." then local "..v1.."="..obfNum(tostring(n1)).." local "..v2.."="..obfNum(tostring(n2)).." "..v1.."="..v2.." end "
+elseif m==2 then return"if "..genOpaque(false).." then for "..v1.."="..obfNum(tostring(1))..","..obfNum(tostring(n1)).." do local "..v2.."="..obfNum(tostring(n2)).." end end "
+elseif m==3 then return"if "..genOpaque(false).." then while true do local "..v1.."="..obfNum(tostring(n1)).." break end end "
+elseif m==4 then return"if "..genOpaque(false).." then repeat local "..v1.."="..obfNum(tostring(n1)).." until true end "
+else return"if "..genOpaque(false).." then local "..v1.."=function() return "..obfNum(tostring(n1)).." end local "..v2.."="..v1.."() end " end
+end
+
+local function genBloat()
+local b=""
+local count=math.random(5,10)
+for i=1,count do
+local m=math.random(1,10)
+if m<=4 then b=b..genJunk()
+elseif m<=7 then b=b..genOpaqueBlock()
+else b=b..genDeadCode() end
+end
+return b
 end
 
 local U={}
 function U:new()
-local o={vm={},out="",jc=0,ji=math.random(6,10),sc=0}
+local o={vm={},out="",jc=0,ji=math.random(3,5),ek=math.random(50,200)}
 setmetatable(o,self)
 self.__index=self
 return o
@@ -149,11 +184,12 @@ function U:mj()
 self.jc=self.jc+1
 if self.jc>=self.ji then
 self.jc=0
-self.ji=math.random(6,10)
+self.ji=math.random(3,5)
 local m=math.random(1,10)
-if m<=4 then self:e(genJunk())
-elseif m<=7 then self:e(genOpaqueBlock())
-else self:e(genDeadCode()) end
+if m<=3 then self:e(genJunk())
+elseif m<=6 then self:e(genOpaqueBlock())
+elseif m<=8 then self:e(genDeadCode())
+else self:e(genBloat()) end
 end
 end
 
@@ -168,8 +204,17 @@ if not s or s=="" then return'""' end
 local k=math.random(50,200)
 local enc=xorEnc(s,k)
 local p={}
-for i=1,#enc do p[i]=tostring(enc[i]) end
-return"_D({"..table.concat(p,",").."},"..k..")"
+for i=1,#enc do p[i]=obfNum(tostring(enc[i])) end
+return"_._d({"..table.concat(p,",").."},"..obfNum(tostring(k))..")"
+end
+
+function U:em(s)
+if not s or s=="" then return'""' end
+local k=math.random(50,200)
+local enc=xorEnc(s,k)
+local p={}
+for i=1,#enc do p[i]=obfNum(tostring(enc[i])) end
+return"_._d({"..table.concat(p,",").."},"..obfNum(tostring(k))..")"
 end
 
 function U:p(n)
@@ -181,10 +226,7 @@ for _,s in ipairs(n.Body) do self:p(s) self:mj() end
 
 elseif t=="LocalStatement" then
 self:e("local ")
-for i,v in ipairs(n.LocalList) do
-self:e(self:gn(v.Name))
-if i<#n.LocalList then self:e(",") end
-end
+for i,v in ipairs(n.LocalList) do self:e(self:gn(v.Name)) if i<#n.LocalList then self:e(",") end end
 if #n.InitList>0 then
 self:e("=")
 for i,x in ipairs(n.InitList) do self:p(x) if i<#n.InitList then self:e(",") end end
@@ -219,7 +261,12 @@ elseif t=="VarExpr" then
 self:e(self:gn(n.Name))
 
 elseif t=="MemberExpr" then
-self:p(n.Base) self:e(n.Indexer) self:e(n.Ident.Data)
+self:p(n.Base)
+local idx=n.Indexer
+local nm=n.Ident.Data
+self:e("[")
+self:e(self:em(nm))
+self:e("]")
 
 elseif t=="IndexExpr" then
 self:p(n.Base) self:e("[") self:p(n.Index) self:e("]")
@@ -233,9 +280,9 @@ if nv:match("^%d+$") and tonumber(nv)<5000 then self:e(obfNum(nv)) else self:e(n
 
 elseif t=="BooleanExpr" then
 if n.Value then
-if math.random(1,3)==1 then self:e("("..genOpaque(true)..")") else self:e("true") end
+if math.random(1,2)==1 then self:e("("..genOpaque(true)..")") else self:e("true") end
 else
-if math.random(1,3)==1 then self:e("("..genOpaque(false)..")") else self:e("false") end
+if math.random(1,2)==1 then self:e("("..genOpaque(false)..")") else self:e("false") end
 end
 
 elseif t=="NilExpr" then
@@ -270,39 +317,40 @@ self:e("(")
 for i,a in ipairs(n.Arguments) do self:e(self:gn(a.Name)) if i<#n.Arguments then self:e(",") end end
 if n.VarArg then if #n.Arguments>0 then self:e(",") end self:e("...") end
 self:e(") ")
+self:e(genBloat())
 self:p(n.Body)
 self:e("end ")
 
 elseif t=="IfStatement" then
 for i,c in ipairs(n.Clauses) do
-if i==1 then self:e("if ") self:p(c.Condition) self:e(" then ")
-elseif c.Condition then self:e("elseif ") self:p(c.Condition) self:e(" then ")
-else self:e("else ") end
+if i==1 then self:e("if ") self:p(c.Condition) self:e(" then ") self:e(genJunk())
+elseif c.Condition then self:e("elseif ") self:p(c.Condition) self:e(" then ") self:e(genJunk())
+else self:e("else ") self:e(genJunk()) end
 self:p(c.Body)
 end
 self:e("end ")
 
 elseif t=="WhileStatement" then
-self:e("while ") self:p(n.Condition) self:e(" do ") self:p(n.Body) self:e("end ")
+self:e("while ") self:p(n.Condition) self:e(" do ") self:e(genJunk()) self:p(n.Body) self:e("end ")
 
 elseif t=="NumericForStatement" then
 self:e("for ") self:e(self:gn(n.Variable.Name).."=")
 self:p(n.Start) self:e(",") self:p(n.End)
 if n.Step then self:e(",") self:p(n.Step) end
-self:e(" do ") self:p(n.Body) self:e("end ")
+self:e(" do ") self:e(genJunk()) self:p(n.Body) self:e("end ")
 
 elseif t=="GenericForStatement" then
 self:e("for ")
 for i,v in ipairs(n.VariableList) do self:e(self:gn(v.Name)) if i<#n.VariableList then self:e(",") end end
 self:e(" in ")
 for i,g in ipairs(n.Generators) do self:p(g) if i<#n.Generators then self:e(",") end end
-self:e(" do ") self:p(n.Body) self:e("end ")
+self:e(" do ") self:e(genJunk()) self:p(n.Body) self:e("end ")
 
 elseif t=="RepeatStatement" then
-self:e("repeat ") self:p(n.Body) self:e("until ") self:p(n.Condition) self:e(" ")
+self:e("repeat ") self:e(genJunk()) self:p(n.Body) self:e("until ") self:p(n.Condition) self:e(" ")
 
 elseif t=="DoStatement" then
-self:e("do ") self:p(n.Body) self:e("end ")
+self:e("do ") self:e(genJunk()) self:p(n.Body) self:e("end ")
 
 elseif t=="ReturnStatement" then
 self:e("return ")
@@ -315,9 +363,13 @@ self:e("break ")
 elseif t=="ConstructorExpr" then
 self:e("{")
 for i,en in ipairs(n.EntryList) do
-if en.Type=="Key" then self:e("[") self:p(en.Key) self:e("]=") self:p(en.Value)
-elseif en.Type=="KeyString" then self:e(en.Key.."=") self:p(en.Value)
-else self:p(en.Value) end
+if en.Type=="Key" then
+self:e("[") self:p(en.Key) self:e("]=") self:p(en.Value)
+elseif en.Type=="KeyString" then
+self:e("[") self:e(self:em(en.Key)) self:e("]=") self:p(en.Value)
+else
+self:p(en.Value)
+end
 if i<#n.EntryList then self:e(",") end
 end
 self:e("}")
@@ -335,26 +387,45 @@ self:e("goto "..n.Label.." ")
 end
 end
 
-local RUNTIME=[[local function _X(a,b) local r,m=0,1 while a>0 or b>0 do local x,y=a%2,b%2 if x~=y then r=r+m end a=math.floor(a/2) b=math.floor(b/2) m=m*2 end return r end local function _D(t,k) local r={} for i=1,#t do r[i]=string.char(_X(t[i],k)) end return table.concat(r) end local _C=function() local a=1+1 return a==2 end ]]
+local RUNTIME=[[local _={} _._x=function(a,b) local r,m=0,1 while a>0 or b>0 do local x,y=a%2,b%2 if x~=y then r=r+m end a=math.floor(a/2) b=math.floor(b/2) m=m*2 end return r end _._d=function(t,k) local r={} for i=1,#t do r[i]=string.char(_._x(t[i],k)) end return table.concat(r) end _._c=function(s) local h=0 for i=1,#s do h=h+string.byte(s,i) end return h end ]]
 
-local function genAntiDebug()
-local checks={}
-checks[1]="if rawget(_G,'__DEBUG') then return end "
-checks[2]="if pcall(function() return debug.getinfo(1) end) and false then while true do end end "
-checks[3]="local _chk="..genOpaque(true).." if not _chk then return end "
-return checks[math.random(1,#checks)]
+local function genAntiTamper()
+local c={}
+c[#c+1]="do "
+c[#c+1]="local "..genJunkVar().."="..obfNum(tostring(math.random(1000,9999))).." "
+c[#c+1]="if rawget(_G,'__DEBUG__') then while true do end end "
+c[#c+1]="if rawget(_G,'__DEOBF__') then return end "
+c[#c+1]=genBloat()
+c[#c+1]="end "
+return table.concat(c)
 end
 
 local function genPrefix()
 local j=""
-j=j..genAntiDebug()
-for i=1,math.random(3,5) do
-local m=math.random(1,3)
-if m==1 then j=j..genJunk()
-elseif m==2 then j=j..genOpaqueBlock()
-else j=j..genDeadCode() end
-end
+j=j..genAntiTamper()
+j=j..genBloat()
+j=j..genBloat()
 return j
+end
+
+local function genSuffix()
+local s=""
+s=s..genBloat()
+s=s..genBloat()
+return s
+end
+
+local function wrapCode(code)
+local w=""
+local wrapperName=genName()
+w=w.."local function "..wrapperName.."() "
+w=w..genBloat()
+w=w..code
+w=w..genBloat()
+w=w.."end "
+w=w..genBloat()
+w=w..wrapperName.."() "
+return w
 end
 
 local fn=arg[1]
@@ -371,16 +442,16 @@ if not ok then print("-- PARSE ERROR: "..tostring(ast)) return end
 local u=U:new()
 u:p(ast)
 
-local final=RUNTIME..genPrefix()..u.out
+local body=u.out
+local wrapped=wrapCode(body)
+local final=RUNTIME..genPrefix()..wrapped..genSuffix()
 
 if DEBUG_MODE then
-print("--[[ === DEBUG MODE === ]]")
+print("--[[ DEBUG ]]")
 print("--[[ RUNTIME ]]")
 print(RUNTIME)
-print("--[[ PREFIX ]]")
-print(genPrefix())
-print("--[[ BODY ]]")
-print(u.out)
+print("--[[ BODY SIZE: "..#body.." ]]")
+print("--[[ FINAL SIZE: "..#final.." ]]")
 else
 print(final)
 end
