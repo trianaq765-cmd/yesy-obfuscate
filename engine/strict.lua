@@ -1,5 +1,24 @@
 -- engine/strict.lua
--- Dummy module agar parser tidak error
--- Modul ini sengaja dikosongkan
+-- Modul strict sederhana untuk kompatibilitas parser
+
+local mt = getmetatable(_G)
+if mt == nil then
+    mt = {}
+    setmetatable(_G, mt)
+end
+
+mt.__declared = {}
+
+function mt.__newindex(t, n, v)
+    mt.__declared[n] = true
+    rawset(t, n, v)
+end
+
+function mt.__index(t, n)
+    if not mt.__declared[n] then
+        return nil
+    end
+    return rawget(t, n)
+end
 
 return {}
