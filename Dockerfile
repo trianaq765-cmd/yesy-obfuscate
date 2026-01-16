@@ -1,5 +1,8 @@
 FROM python:3.9-slim
 
+# TRIK: Ubah angka ini setiap kali deploy untuk paksa rebuild
+ENV CACHE_BUST=2
+
 RUN apt-get update && apt-get install -y \
     lua5.1 \
     liblua5.1-0-dev \
@@ -8,18 +11,21 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-RUN mkdir -p engine
 
-# Download Parser saja
-RUN wget -O engine/parser.lua https://raw.githubusercontent.com/stravant/LuaMinify/master/ParseLua.lua
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy SEMUA file (termasuk engine/strict.lua yang sudah Anda buat)
+# Copy SEMUA file DULU (termasuk strict.lua)
 COPY . .
 
-ENV LUA_PATH="/app/engine/?.lua;./engine/?.lua;/app/?.lua;;"
+# Download parser SETELAH copy (akan menimpa jika ada)
+RUN wget -O engine/parser.lua https://raw.githubusercontent.com/stravant/LuaMinify/master/ParseLua.lua
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Set Lua path
+ENV LUA_PATH="/app/engine/?.lua;./engine/?.lua;?.lua;;"
+
+# Debug: List isi folder engine untuk verifikasi
+RUN echo "=== ISI FOLDER ENGINE ===" && ls -la engine/
 
 EXPOSE 8080
 CMD ["python", "bot.py"]
