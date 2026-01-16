@@ -2,499 +2,350 @@ package.path=package.path..";./?.lua;./engine/?.lua;/app/engine/?.lua"
 local parser=require("parser")
 math.randomseed(os.time())
 
--- DEBUG MODE: Set ke true untuk melihat output terpisah
-local DEBUG_MODE = true
-
+local DEBUG_MODE=false
 local usedNames={}
-local function generateRandomName()
-local charset={"I","l","1","_"}
-local name
-repeat name="_" for i=1,math.random(10,18)do name=name..charset[math.random(1,#charset)]end until not usedNames[name]
-usedNames[name]=true
-return name
+
+local GLOBALS={
+["print"]=1,["warn"]=1,["error"]=1,["pairs"]=1,["ipairs"]=1,["next"]=1,
+["tonumber"]=1,["tostring"]=1,["type"]=1,["pcall"]=1,["xpcall"]=1,
+["assert"]=1,["select"]=1,["unpack"]=1,["rawget"]=1,["rawset"]=1,
+["rawequal"]=1,["require"]=1,["setmetatable"]=1,["getmetatable"]=1,
+["loadstring"]=1,["loadfile"]=1,["dofile"]=1,["collectgarbage"]=1,
+["newproxy"]=1,["math"]=1,["string"]=1,["table"]=1,["coroutine"]=1,
+["debug"]=1,["os"]=1,["io"]=1,["bit"]=1,["bit32"]=1,["_G"]=1,
+["_VERSION"]=1,["shared"]=1,["game"]=1,["workspace"]=1,["script"]=1,
+["plugin"]=1,["Enum"]=1,["Instance"]=1,["Vector2"]=1,["Vector3"]=1,
+["CFrame"]=1,["Color3"]=1,["UDim"]=1,["UDim2"]=1,["Rect"]=1,
+["Region3"]=1,["Ray"]=1,["BrickColor"]=1,["TweenInfo"]=1,
+["NumberSequence"]=1,["ColorSequence"]=1,["NumberRange"]=1,
+["Random"]=1,["DateTime"]=1,["typeof"]=1,["spawn"]=1,["delay"]=1,
+["wait"]=1,["tick"]=1,["time"]=1,["elapsedTime"]=1,["settings"]=1,
+["stats"]=1,["UserSettings"]=1,["version"]=1,["task"]=1,
+["getgenv"]=1,["getrenv"]=1,["getfenv"]=1,["setfenv"]=1,["getsenv"]=1,
+["getrawmetatable"]=1,["setrawmetatable"]=1,["setreadonly"]=1,
+["isreadonly"]=1,["hookfunction"]=1,["hookmetamethod"]=1,
+["newcclosure"]=1,["islclosure"]=1,["iscclosure"]=1,
+["getnamecallmethod"]=1,["setnamecallmethod"]=1,["checkcaller"]=1,
+["getcallingscript"]=1,["getinfo"]=1,["getupvalue"]=1,["setupvalue"]=1,
+["getupvalues"]=1,["getconstant"]=1,["setconstant"]=1,["getconstants"]=1,
+["getproto"]=1,["getprotos"]=1,["getstack"]=1,["setstack"]=1,
+["getconnections"]=1,["firesignal"]=1,["fireclickdetector"]=1,
+["fireproximityprompt"]=1,["firetouchinterest"]=1,["gethiddenproperty"]=1,
+["sethiddenproperty"]=1,["setsimulationradius"]=1,["getinstances"]=1,
+["getnilinstances"]=1,["getscripts"]=1,["getrunningscripts"]=1,
+["getloadedmodules"]=1,["getcustomasset"]=1,["cloneref"]=1,
+["compareinstances"]=1,["Drawing"]=1,["setclipboard"]=1,["setfflag"]=1,
+["getfflag"]=1,["syn"]=1,["fluxus"]=1,["identifyexecutor"]=1,
+["request"]=1,["http_request"]=1,["HttpGet"]=1,["readfile"]=1,
+["writefile"]=1,["appendfile"]=1,["listfiles"]=1,["isfile"]=1,
+["isfolder"]=1,["makefolder"]=1,["delfolder"]=1,["delfile"]=1,
+["getgc"]=1,["queue_on_teleport"]=1,["_OBF_D"]=1,["_OBF_X"]=1,
+["true"]=1,["false"]=1,["nil"]=1
+}
+
+local function genName()
+local cs={"I","l","1","_"}
+local n
+repeat
+n="_"
+for i=1,math.random(10,16) do n=n..cs[math.random(1,4)] end
+until not usedNames[n]
+usedNames[n]=true
+return n
 end
 
-local function generateJunkName()
-local prefixes={"_a","_b","_c","_d","_e"}
-local name=prefixes[math.random(1,#prefixes)]
-for i=1,math.random(3,5)do name=name..string.char(math.random(97,122))end
-return name
+local function genJunkName()
+local n="_v"
+for i=1,math.random(3,5) do n=n..string.char(math.random(97,122)) end
+return n
 end
 
-local function xorEncrypt(str,key)
-local result={}
-for i=1,#str do
-local byte=string.byte(str,i)
-local xored,pow,a,b=0,1,byte,key
-while a>0 or b>0 do
-local aa,bb=a%2,b%2
-if aa~=bb then xored=xored+pow end
-a,b=math.floor(a/2),math.floor(b/2)
-pow=pow*2
+local function xorEnc(s,k)
+local r={}
+for i=1,#s do
+local b=string.byte(s,i)
+local x,p,a,bb=0,1,b,k
+while a>0 or bb>0 do
+local aa,bbb=a%2,bb%2
+if aa~=bbb then x=x+p end
+a=math.floor(a/2)
+bb=math.floor(bb/2)
+p=p*2
 end
-table.insert(result,xored)
+r[#r+1]=x
 end
-return result
+return r
 end
 
-local function obfuscateNumber(numStr)
-local n=tonumber(numStr)
-if not n or n~=math.floor(n)or n<0 or n>50000 then return numStr end
-if n==0 then return"(1-1)"end
-if n==1 then return"(2-1)"end
+local function obfNum(ns)
+local n=tonumber(ns)
+if not n then return ns end
+if n~=math.floor(n) then return ns end
+if n<0 or n>50000 then return ns end
+if n==0 then return"(1-1)" end
+if n==1 then return"(2-1)" end
 local a=math.random(1,100)
 return"("..(n+a).."-"..a..")"
 end
 
-local function generateJunkCode()
-local v=generateJunkName()
-local n=math.random(100,999)
-return"local "..v.."="..n.." "
+local function genJunk()
+return"local "..genJunkName().."="..math.random(100,999).." "
 end
 
-local Unparser={}
-function Unparser:new()
-local obj={varMap={},encryptionKey=math.random(50,200),output="",jc=0,ji=math.random(8,12)}
-setmetatable(obj,self)
+local U={}
+function U:new()
+local o={vm={},ek=math.random(50,200),out="",jc=0,ji=math.random(8,12)}
+setmetatable(o,self)
 self.__index=self
-return obj
+return o
 end
 
-function Unparser:emit(str)
-self.output=self.output..str
-end
+function U:e(s) self.out=self.out..s end
 
-function Unparser:maybeJunk()
+function U:mj()
 self.jc=self.jc+1
 if self.jc>=self.ji then
 self.jc=0
 self.ji=math.random(8,12)
-self:emit(generateJunkCode())
+self:e(genJunk())
 end
 end
 
-function Unparser:getName(old)
-local gl={["print"]=1,["warn"]=1,["error"]=1,["pairs"]=1,["ipairs"]=1,["next"]=1,["tonumber"]=1,["tostring"]=1,["type"]=1,["pcall"]=1,["xpcall"]=1,["assert"]=1,["select"]=1,["unpack"]=1,["rawget"]=1,["rawset"]=1,["rawequal"]=1,["require"]=1,["setmetatable"]=1,["getmetatable"]=1,["loadstring"]=1,["loadfile"]=1,["dofile"]=1,["collectgarbage"]=1,["newproxy"]=1,["math"]=1,["string"]=1,["table"]=1,["coroutine"]=1,["debug"]=1,["os"]=1,["io"]=1,["bit"]=1,["bit32"]=1,["_G"]=1,["_VERSION"]=1,["shared"]=1,["game"]=1,["workspace"]=1,["script"]=1,["plugin"]=1,["Enum"]=1,["Instance"]=1,["Vector2"]=1,["Vector3"]=1,["CFrame"]=1,["Color3"]=1,["UDim"]=1,["UDim2"]=1,["Rect"]=1,["Region3"]=1,["Ray"]=1,["BrickColor"]=1,["TweenInfo"]=1,["NumberSequence"]=1,["ColorSequence"]=1,["NumberRange"]=1,["Random"]=1,["DateTime"]=1,["typeof"]=1,["spawn"]=1,["delay"]=1,["wait"]=1,["tick"]=1,["time"]=1,["elapsedTime"]=1,["settings"]=1,["stats"]=1,["UserSettings"]=1,["version"]=1,["task"]=1,["getgenv"]=1,["getrenv"]=1,["getfenv"]=1,["setfenv"]=1,["getsenv"]=1,["getrawmetatable"]=1,["setrawmetatable"]=1,["setreadonly"]=1,["isreadonly"]=1,["hookfunction"]=1,["hookmetamethod"]=1,["newcclosure"]=1,["islclosure"]=1,["iscclosure"]=1,["getnamecallmethod"]=1,["setnamecallmethod"]=1,["checkcaller"]=1,["getcallingscript"]=1,["getinfo"]=1,["getupvalue"]=1,["setupvalue"]=1,["getupvalues"]=1,["getconstant"]=1,["setconstant"]=1,["getconstants"]=1,["getproto"]=1,["getprotos"]=1,["getstack"]=1,["setstack"]=1,["getconnections"]=1,["firesignal"]=1,["fireclickdetector"]=1,["fireproximityprompt"]=1,["firetouchinterest"]=1,["gethiddenproperty"]=1,["sethiddenproperty"]=1,["setsimulationradius"]=1,["getinstances"]=1,["getnilinstances"]=1,["getscripts"]=1,["getrunningscripts"]=1,["getloadedmodules"]=1,["getcustomasset"]=1,["cloneref"]=1,["compareinstances"]=1,["Drawing"]=1,["setclipboard"]=1,["setfflag"]=1,["getfflag"]=1,["syn"]=1,["fluxus"]=1,["identifyexecutor"]=1,["request"]=1,["http_request"]=1,["HttpGet"]=1,["readfile"]=1,["writefile"]=1,["appendfile"]=1,["listfiles"]=1,["isfile"]=1,["isfolder"]=1,["makefolder"]=1,["delfolder"]=1,["delfile"]=1,["getgc"]=1,["queue_on_teleport"]=1,["___D"]=1,["___X"]=1,["true"]=1,["false"]=1,["nil"]=1}
-if gl[old] then return old end
-if not self.varMap[old] then self.varMap[old]=generateRandomName() end
-return self.varMap[old]
+function U:gn(old)
+if GLOBALS[old] then return old end
+if not self.vm[old] then self.vm[old]=genName() end
+return self.vm[old]
 end
 
-function Unparser:encStr(str)
-if not str or str=="" then return'""' end
-local enc=xorEncrypt(str,self.encryptionKey)
+function U:es(s)
+if not s or s=="" then return'""' end
+local enc=xorEnc(s,self.ek)
 local p={}
-for _,v in ipairs(enc) do table.insert(p,tostring(v)) end
-return"___D({"..table.concat(p,",").."},"..self.encryptionKey..")"
+for i=1,#enc do p[i]=tostring(enc[i]) end
+return"_OBF_D({"..table.concat(p,",").."},"..self.ek..")"
 end
 
-function Unparser:proc(node)
-if not node then return end
-local t=node.AstType
+function U:p(n)
+if not n then return end
+local t=n.AstType
 
 if t=="Statlist" then
-for _,s in ipairs(node.Body) do self:proc(s) self:maybeJunk() end
+for _,s in ipairs(n.Body) do self:p(s) self:mj() end
 
 elseif t=="LocalStatement" then
-self:emit("local ")
-for i,v in ipairs(node.LocalList) do
-self:emit(self:getName(v.Name))
-if i<#node.LocalList then self:emit(",") end
+self:e("local ")
+for i,v in ipairs(n.LocalList) do
+self:e(self:gn(v.Name))
+if i<#n.LocalList then self:e(",") end
 end
-if #node.InitList>0 then
-self:emit("=")
-for i,e in ipairs(node.InitList) do
-self:proc(e)
-if i<#node.InitList then self:emit(",") end
+if #n.InitList>0 then
+self:e("=")
+for i,x in ipairs(n.InitList) do
+self:p(x)
+if i<#n.InitList then self:e(",") end
 end
 end
-self:emit(" ")
+self:e(" ")
 
 elseif t=="AssignmentStatement" then
-for i,l in ipairs(node.Lhs) do self:proc(l) if i<#node.Lhs then self:emit(",") end end
-self:emit("=")
-for i,r in ipairs(node.Rhs) do self:proc(r) if i<#node.Rhs then self:emit(",") end end
-self:emit(" ")
+for i,l in ipairs(n.Lhs) do self:p(l) if i<#n.Lhs then self:e(",") end end
+self:e("=")
+for i,r in ipairs(n.Rhs) do self:p(r) if i<#n.Rhs then self:e(",") end end
+self:e(" ")
 
 elseif t=="CallStatement" then
-self:proc(node.Expression)
-self:emit(" ")
+self:p(n.Expression) self:e(" ")
 
 elseif t=="CallExpr" then
-self:proc(node.Base)
-self:emit("(")
-for i,a in ipairs(node.Arguments) do self:proc(a) if i<#node.Arguments then self:emit(",") end end
-self:emit(")")
+self:p(n.Base) self:e("(")
+for i,a in ipairs(n.Arguments) do self:p(a) if i<#n.Arguments then self:e(",") end end
+self:e(")")
 
 elseif t=="StringCallExpr" then
-self:proc(node.Base)
-self:emit("(")
-for _,a in ipairs(node.Arguments) do self:proc(a) end
-self:emit(")")
+self:p(n.Base) self:e("(")
+for _,a in ipairs(n.Arguments) do self:p(a) end
+self:e(")")
 
 elseif t=="TableCallExpr" then
-self:proc(node.Base)
-self:emit("(")
-for _,a in ipairs(node.Arguments) do self:proc(a) end
-self:emit(")")
+self:p(n.Base) self:e("(")
+for _,a in ipairs(n.Arguments) do self:p(a) end
+self:e(")")
 
 elseif t=="VarExpr" then
-self:emit(self:getName(node.Name))
+self:e(self:gn(n.Name))
 
 elseif t=="MemberExpr" then
-self:proc(node.Base)
-self:emit(node.Indexer)
-self:emit(node.Ident.Data)
+self:p(n.Base) self:e(n.Indexer) self:e(n.Ident.Data)
 
 elseif t=="IndexExpr" then
-self:proc(node.Base)
-self:emit("[")
-self:proc(node.Index)
-self:emit("]")
+self:p(n.Base) self:e("[") self:p(n.Index) self:e("]")
 
 elseif t=="StringExpr" then
-self:emit(self:encStr(node.Value.Constant or""))
+self:e(self:es(n.Value.Constant or""))
 
 elseif t=="NumberExpr" then
-local nv=node.Value.Data
-if nv:match("^%d+$") and tonumber(nv)<5000 then
-self:emit(obfuscateNumber(nv))
-else
-self:emit(nv)
-end
+local nv=n.Value.Data
+if nv:match("^%d+$") and tonumber(nv)<5000 then self:e(obfNum(nv)) else self:e(nv) end
 
 elseif t=="BooleanExpr" then
-self:emit(node.Value and "true" or "false")
+self:e(n.Value and "true" or "false")
 
 elseif t=="NilExpr" then
-self:emit("nil")
+self:e("nil")
 
 elseif t=="Parentheses" then
-self:emit("(")
-self:proc(node.Inner)
-self:emit(")")
+self:e("(") self:p(n.Inner) self:e(")")
 
 elseif t=="BinopExpr" then
-self:proc(node.Lhs)
-self:emit(" "..node.Op.." ")
-self:proc(node.Rhs)
+self:p(n.Lhs) self:e(" "..n.Op.." ") self:p(n.Rhs)
 
 elseif t=="UnopExpr" then
-if node.Op=="not" then self:emit("not ")
-elseif node.Op=="-" then self:emit("-")
-elseif node.Op=="#" then self:emit("#")
-else self:emit(node.Op) end
-self:proc(node.Rhs)
+if n.Op=="not" then self:e("not ")
+elseif n.Op=="-" then self:e("-")
+elseif n.Op=="#" then self:e("#")
+else self:e(n.Op) end
+self:p(n.Rhs)
 
 elseif t=="Function" then
-if node.IsLocal then
-if node.Name then
-self:emit("local function ")
-if type(node.Name)=="table" and node.Name.Name then
-self:emit(self:getName(node.Name.Name))
-elseif type(node.Name)=="string" then
-self:emit(self:getName(node.Name))
+if n.IsLocal then
+if n.Name then
+self:e("local function ")
+if type(n.Name)=="table" and n.Name.Name then
+self:e(self:gn(n.Name.Name))
+elseif type(n.Name)=="string" then
+self:e(self:gn(n.Name))
 else
-self:proc(node.Name)
-end
-else
-self:emit("function")
+self:p(n.Name)
 end
 else
-self:emit("function ")
-if node.Name then self:proc(node.Name) end
+self:e("function")
 end
-self:emit("(")
-for i,a in ipairs(node.Arguments) do
-self:emit(self:getName(a.Name))
-if i<#node.Arguments then self:emit(",") end
+else
+self:e("function ")
+if n.Name then self:p(n.Name) end
 end
-if node.VarArg then
-if #node.Arguments>0 then self:emit(",") end
-self:emit("...")
+self:e("(")
+for i,a in ipairs(n.Arguments) do
+self:e(self:gn(a.Name))
+if i<#n.Arguments then self:e(",") end
 end
-self:emit(") ")
-self:proc(node.Body)
-self:emit("end ")
+if n.VarArg then
+if #n.Arguments>0 then self:e(",") end
+self:e("...")
+end
+self:e(") ")
+self:p(n.Body)
+self:e("end ")
 
 elseif t=="IfStatement" then
-for i,c in ipairs(node.Clauses) do
+for i,c in ipairs(n.Clauses) do
 if i==1 then
-self:emit("if ")
-self:proc(c.Condition)
-self:emit(" then ")
+self:e("if ") self:p(c.Condition) self:e(" then ")
 elseif c.Condition then
-self:emit("elseif ")
-self:proc(c.Condition)
-self:emit(" then ")
+self:e("elseif ") self:p(c.Condition) self:e(" then ")
 else
-self:emit("else ")
+self:e("else ")
 end
-self:proc(c.Body)
+self:p(c.Body)
 end
-self:emit("end ")
+self:e("end ")
 
 elseif t=="WhileStatement" then
-self:emit("while ")
-self:proc(node.Condition)
-self:emit(" do ")
-self:proc(node.Body)
-self:emit("end ")
+self:e("while ") self:p(n.Condition) self:e(" do ") self:p(n.Body) self:e("end ")
 
 elseif t=="NumericForStatement" then
-self:emit("for ")
-self:emit(self:getName(node.Variable.Name).."=")
-self:proc(node.Start)
-self:emit(",")
-self:proc(node.End)
-if node.Step then self:emit(",") self:proc(node.Step) end
-self:emit(" do ")
-self:proc(node.Body)
-self:emit("end ")
+self:e("for ") self:e(self:gn(n.Variable.Name).."=")
+self:p(n.Start) self:e(",") self:p(n.End)
+if n.Step then self:e(",") self:p(n.Step) end
+self:e(" do ") self:p(n.Body) self:e("end ")
 
 elseif t=="GenericForStatement" then
-self:emit("for ")
-for i,v in ipairs(node.VariableList) do
-self:emit(self:getName(v.Name))
-if i<#node.VariableList then self:emit(",") end
+self:e("for ")
+for i,v in ipairs(n.VariableList) do
+self:e(self:gn(v.Name))
+if i<#n.VariableList then self:e(",") end
 end
-self:emit(" in ")
-for i,g in ipairs(node.Generators) do
-self:proc(g)
-if i<#node.Generators then self:emit(",") end
+self:e(" in ")
+for i,g in ipairs(n.Generators) do
+self:p(g)
+if i<#n.Generators then self:e(",") end
 end
-self:emit(" do ")
-self:proc(node.Body)
-self:emit("end ")
+self:e(" do ") self:p(n.Body) self:e("end ")
 
 elseif t=="RepeatStatement" then
-self:emit("repeat ")
-self:proc(node.Body)
-self:emit("until ")
-self:proc(node.Condition)
-self:emit(" ")
+self:e("repeat ") self:p(n.Body) self:e("until ") self:p(n.Condition) self:e(" ")
 
 elseif t=="DoStatement" then
-self:emit("do ")
-self:proc(node.Body)
-self:emit("end ")
+self:e("do ") self:p(n.Body) self:e("end ")
 
 elseif t=="ReturnStatement" then
-self:emit("return ")
-for i,a in ipairs(node.Arguments) do
-self:proc(a)
-if i<#node.Arguments then self:emit(",") end
+self:e("return ")
+for i,a in ipairs(n.Arguments) do
+self:p(a)
+if i<#n.Arguments then self:e(",") end
 end
-self:emit(" ")
+self:e(" ")
 
 elseif t=="BreakStatement" then
-self:emit("break ")
+self:e("break ")
 
 elseif t=="ConstructorExpr" then
-self:emit("{")
-for i,e in ipairs(node.EntryList) do
-if e.Type=="Key" then
-self:emit("[")
-self:proc(e.Key)
-self:emit("]=")
-self:proc(e.Value)
-elseif e.Type=="KeyString" then
-self:emit(e.Key.."=")
-self:proc(e.Value)
+self:e("{")
+for i,en in ipairs(n.EntryList) do
+if en.Type=="Key" then
+self:e("[") self:p(en.Key) self:e("]=") self:p(en.Value)
+elseif en.Type=="KeyString" then
+self:e(en.Key.."=") self:p(en.Value)
 else
-self:proc(e.Value)
+self:p(en.Value)
 end
-if i<#node.EntryList then self:emit(",") end
+if i<#n.EntryList then self:e(",") end
 end
-self:emit("}")
+self:e("}")
 
 elseif t=="DotsExpr" then
-self:emit("...")
+self:e("...")
 
 elseif t=="Eof" then
 
 elseif t=="LabelStatement" then
-self:emit("::"..node.Label..":: ")
+self:e("::"..n.Label..":: ")
 
 elseif t=="GotoStatement" then
-self:emit("goto "..node.Label.." ")
+self:e("goto "..n.Label.." ")
 end
 end
 
-local function getRuntime()
-local r = {}
-table.insert(r, "local function ___X(a,b)")
-table.insert(r, "local r,m=0,1 ")
-table.insert(r, "while a>0 or b>0 do ")
-table.insert(r, "local x,y=a%2,b%2 ")
-table.insert(r, "if x~=y then r=r+m end ")
-table.insert(r, "a=math.floor(a/2) ")
-table.insert(r, "b=math.floor(b/2) ")
-table.insert(r, "m=m*2 ")
-table.insert(r, "end ")
-table.insert(r, "return r ")
-table.insert(r, "end ")
-table.insert(r, "local function ___D(t,k)")
-table.insert(r, "local r={} ")
-table.insert(r, "for i=1,#t do ")
-table.insert(r, "r[i]=string.char(___X(t[i],k)) ")
-table.insert(r, "end ")
-table.insert(r, "return table.concat(r) ")
-table.insert(r, "end ")
-return table.concat(r)
-end
+local RUNTIME=[[local function _OBF_X(a,b) local r,m=0,1 while a>0 or b>0 do local x,y=a%2,b%2 if x~=y then r=r+m end a=math.floor(a/2) b=math.floor(b/2) m=m*2 end return r end local function _OBF_D(t,k) local r={} for i=1,#t do r[i]=string.char(_OBF_X(t[i],k)) end return table.concat(r) end ]]
 
-local function getJunkPrefix()
+local function genJunkPrefix()
 local j=""
-for i=1,math.random(2,3) do j=j..generateJunkCode() end
+for i=1,math.random(2,3) do j=j..genJunk() end
 return j
 end
 
--- MAIN
 local fn=arg[1]
-if not fn then print("-- ERROR: No input file") return end
+if not fn then print("-- ERROR: No input") return end
 
 local f=io.open(fn,"rb")
-if not f then print("-- ERROR: Cannot open file") return end
+if not f then print("-- ERROR: Cannot open") return end
 local code=f:read("*a")
 f:close()
 
 local ok,ast=parser.ParseLua(code)
 if not ok then print("-- PARSE ERROR: "..tostring(ast)) return end
 
-local u=Unparser:new()
-u:proc(ast)
+local u=U:new()
+u:p(ast)
 
-local runtime=getRuntime()
-local junk=getJunkPrefix()
-local body=u.output
-local final=runtime..junk..body
+local final=RUNTIME..genJunkPrefix()..u.out
 
 if DEBUG_MODE then
-print("-- ========== DEBUG: RUNTIME ==========")
-print(runtime)
-print("-- ========== DEBUG: JUNK ==========")
-print(junk)
-print("-- ========== DEBUG: BODY ==========")
-print(body)
-print("-- ========== DEBUG: END ==========")
+print("--[[ RUNTIME ]]")
+print(RUNTIME)
+print("--[[ BODY ]]")
+print(u.out)
+print("--[[ END ]]")
 else
 print(final)
-endif globals[oldName]then return oldName end
-if not self.varMap[oldName]then self.varMap[oldName]=generateRandomName()end
-return self.varMap[oldName]
 end
-function Unparser:encryptString(str)
-if not str or str==""then return'""'end
-local encrypted=xorEncrypt(str,self.encryptionKey)
-local parts={}
-for i,v in ipairs(encrypted)do table.insert(parts,tostring(v))end
-return"DStr({"..table.concat(parts,",").."},"..self.encryptionKey..")"
-end
-function Unparser:processNode(node)
-if not node then return end
-local t=node.AstType
-if t=="Statlist"then for _,stmt in ipairs(node.Body)do self:processNode(stmt)self:maybeInsertJunk()end
-elseif t=="LocalStatement"then
-self:emit("local ")
-for i,var in ipairs(node.LocalList)do self:emit(self:getNewVarName(var.Name))if i<#node.LocalList then self:emit(",")end end
-if #node.InitList>0 then self:emit("=")for i,expr in ipairs(node.InitList)do self:processNode(expr)if i<#node.InitList then self:emit(",")end end end
-self:emit("; ")
-elseif t=="AssignmentStatement"then
-for i,lhs in ipairs(node.Lhs)do self:processNode(lhs)if i<#node.Lhs then self:emit(",")end end
-self:emit("=")
-for i,rhs in ipairs(node.Rhs)do self:processNode(rhs)if i<#node.Rhs then self:emit(",")end end
-self:emit("; ")
-elseif t=="CallStatement"then self:processNode(node.Expression)self:emit("; ")
-elseif t=="CallExpr"then
-self:processNode(node.Base)self:emit("(")
-for i,arg in ipairs(node.Arguments)do self:processNode(arg)if i<#node.Arguments then self:emit(",")end end
-self:emit(")")
-elseif t=="StringCallExpr"then self:processNode(node.Base)self:emit("(")for _,arg in ipairs(node.Arguments)do self:processNode(arg)end self:emit(")")
-elseif t=="TableCallExpr"then self:processNode(node.Base)self:emit("(")for _,arg in ipairs(node.Arguments)do self:processNode(arg)end self:emit(")")
-elseif t=="VarExpr"then self:emit(self:getNewVarName(node.Name))
-elseif t=="MemberExpr"then self:processNode(node.Base)self:emit(node.Indexer)self:emit(node.Ident.Data)
-elseif t=="IndexExpr"then self:processNode(node.Base)self:emit("[")self:processNode(node.Index)self:emit("]")
-elseif t=="StringExpr"then self:emit(self:encryptString(node.Value.Constant or""))
-elseif t=="NumberExpr"then
-local numVal=node.Value.Data
-if numVal:match("^%d+$")and tonumber(numVal)<10000 then self:emit(obfuscateNumber(numVal))else self:emit(numVal)end
-elseif t=="BooleanExpr"then self:emit(node.Value and"true"or"false")
-elseif t=="NilExpr"then self:emit("nil")
-elseif t=="Parentheses"then self:emit("(")self:processNode(node.Inner)self:emit(")")
-elseif t=="BinopExpr"then self:processNode(node.Lhs)self:emit(" "..node.Op.." ")self:processNode(node.Rhs)
-elseif t=="UnopExpr"then
-if node.Op=="not"then self:emit("not ")elseif node.Op=="-"then self:emit("-")elseif node.Op=="#"then self:emit("#")else self:emit(node.Op)end
-self:processNode(node.Rhs)
-elseif t=="Function"then
-if node.IsLocal then
-if node.Name then
-self:emit("local function ")
-if type(node.Name)=="table"and node.Name.Name then self:emit(self:getNewVarName(node.Name.Name))
-elseif type(node.Name)=="string"then self:emit(self:getNewVarName(node.Name))
-else self:processNode(node.Name)end
-else self:emit("function")end
-else self:emit("function ")if node.Name then self:processNode(node.Name)end end
-self:emit("(")
-for i,arg in ipairs(node.Arguments)do self:emit(self:getNewVarName(arg.Name))if i<#node.Arguments then self:emit(",")end end
-if node.VarArg then if #node.Arguments>0 then self:emit(",")end self:emit("...")end
-self:emit(") ")self:processNode(node.Body)self:emit("end ")
-elseif t=="IfStatement"then
-for i,clause in ipairs(node.Clauses)do
-if i==1 then self:emit("if ")self:processNode(clause.Condition)self:emit(" then ")
-elseif clause.Condition then self:emit("elseif ")self:processNode(clause.Condition)self:emit(" then ")
-else self:emit("else ")end
-self:processNode(clause.Body)
-end
-self:emit("end ")
-elseif t=="WhileStatement"then self:emit("while ")self:processNode(node.Condition)self:emit(" do ")self:processNode(node.Body)self:emit("end ")
-elseif t=="NumericForStatement"then
-self:emit("for ")self:emit(self:getNewVarName(node.Variable.Name).."=")
-self:processNode(node.Start)self:emit(",")self:processNode(node.End)
-if node.Step then self:emit(",")self:processNode(node.Step)end
-self:emit(" do ")self:processNode(node.Body)self:emit("end ")
-elseif t=="GenericForStatement"then
-self:emit("for ")
-for i,var in ipairs(node.VariableList)do self:emit(self:getNewVarName(var.Name))if i<#node.VariableList then self:emit(",")end end
-self:emit(" in ")
-for i,gen in ipairs(node.Generators)do self:processNode(gen)if i<#node.Generators then self:emit(",")end end
-self:emit(" do ")self:processNode(node.Body)self:emit("end ")
-elseif t=="RepeatStatement"then self:emit("repeat ")self:processNode(node.Body)self:emit("until ")self:processNode(node.Condition)self:emit(" ")
-elseif t=="DoStatement"then self:emit("do ")self:processNode(node.Body)self:emit("end ")
-elseif t=="ReturnStatement"then
-self:emit("return ")
-for i,arg in ipairs(node.Arguments)do self:processNode(arg)if i<#node.Arguments then self:emit(",")end end
-self:emit(" ")
-elseif t=="BreakStatement"then self:emit("break ")
-elseif t=="ConstructorExpr"then
-self:emit("{")
-for i,entry in ipairs(node.EntryList)do
-if entry.Type=="Key"then self:emit("[")self:processNode(entry.Key)self:emit("]=")self:processNode(entry.Value)
-elseif entry.Type=="KeyString"then self:emit(entry.Key.."=")self:processNode(entry.Value)
-else self:processNode(entry.Value)end
-if i<#node.EntryList then self:emit(",")end
-end
-self:emit("}")
-elseif t=="DotsExpr"then self:emit("...")
-elseif t=="Eof"then
-elseif t=="LabelStatement"then self:emit("::"..node.Label..":: ")
-elseif t=="GotoStatement"then self:emit("goto "..node.Label.." ")
-end
-end
-local RUNTIME="local function XByte(a,b) local r,m=0,1; while a>0 or b>0 do local x,y=a%2,b%2; if x~=y then r=r+m; end; a=math.floor(a/2); b=math.floor(b/2); m=m*2; end; return r; end; local function DStr(t,k) local r={}; for i=1,#t do r[i]=string.char(XByte(t[i],k)); end; return table.concat(r); end; "
-local function generateJunkPrefix()
-local junk=""
-for i=1,math.random(2,3)do junk=junk..generateJunkCode()end
-return junk
-end
-local filename=arg[1]
-if not filename then print("-- ERROR: No input")return end
-local f=io.open(filename,"rb")
-if not f then print("-- ERROR: Cannot open")return end
-local code=f:read("*a")
-f:close()
-local success,ast=parser.ParseLua(code)
-if not success then print("-- ERROR: "..tostring(ast))return end
-local unparser=Unparser:new()
-unparser:processNode(ast)
-print(RUNTIME..generateJunkPrefix()..unparser.output)
