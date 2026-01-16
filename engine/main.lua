@@ -117,33 +117,33 @@ local function genJunk()
 local m=math.random(1,8)
 local v=genJunkVar()
 local n=math.random(100,9999)
-if m==1 then return"local "..v.."="..obfNum(tostring(n))..";"
-elseif m==2 then return"local "..v.."="..obfNum(tostring(n)).."+"..obfNum(tostring(math.random(1,100)))..";"
-elseif m==3 then return"local "..v.."="..genOpaque(true).." and "..obfNum(tostring(n)).." or 0;"
-elseif m==4 then return"local "..v.."=(function() return "..obfNum(tostring(n)).." end)();"
-elseif m==5 then return"local "..v.."={};"
-elseif m==6 then return"local "..v..";"..v.."="..obfNum(tostring(n))..";"
-elseif m==7 then return"local "..v.."="..obfNum(tostring(n))..";if "..genOpaque(false).." then "..v.."=0 end;"
-else return"local "..v.."="..obfNum(tostring(n))..";do local _="..v.." end;" end
+if m==1 then return"local "..v.."="..obfNum(tostring(n)).." "
+elseif m==2 then return"local "..v.."="..obfNum(tostring(n)).."+"..obfNum(tostring(math.random(1,100))).." "
+elseif m==3 then return"local "..v.."="..genOpaque(true).." and "..obfNum(tostring(n)).." or 0 "
+elseif m==4 then return"local "..v.."=(function() return "..obfNum(tostring(n)).." end)() "
+elseif m==5 then return"local "..v.."={} "
+elseif m==6 then return"local "..v.." "..v.."="..obfNum(tostring(n)).." "
+elseif m==7 then return"local "..v.."="..obfNum(tostring(n)).." if "..genOpaque(false).." then "..v.."=0 end "
+else return"local "..v.."="..obfNum(tostring(n)).." do local _="..v.." end " end
 end
 
 local function genOpaqueBlock()
 local m=math.random(1,5)
-if m==1 then return"if "..genOpaque(true).." then "..genJunk()..genJunk()..genJunk().." end;"
-elseif m==2 then return"if "..genOpaque(false).." then "..genJunk().." else "..genJunk()..genJunk().." end;"
-elseif m==3 then return"do "..genJunk()..genJunk()..genJunk().." end;"
-elseif m==4 then return"for _="..obfNum("1")..","..obfNum("0").." do "..genJunk()..genJunk().." end;"
-else return"while "..genOpaque(false).." do "..genJunk().." break end;" end
+if m==1 then return"if "..genOpaque(true).." then "..genJunk()..genJunk()..genJunk().." end "
+elseif m==2 then return"if "..genOpaque(false).." then "..genJunk().." else "..genJunk()..genJunk().." end "
+elseif m==3 then return"do "..genJunk()..genJunk()..genJunk().." end "
+elseif m==4 then return"for _="..obfNum("1")..","..obfNum("0").." do "..genJunk()..genJunk().." end "
+else return"while "..genOpaque(false).." do "..genJunk().." break end " end
 end
 
 local function genDeadCode()
 local m=math.random(1,4)
 local v1,v2=genJunkVar(),genJunkVar()
 local n1,n2=math.random(1000,9999),math.random(1000,9999)
-if m==1 then return"if "..genOpaque(false).." then local "..v1.."="..obfNum(tostring(n1)).." local "..v2.."="..obfNum(tostring(n2)).." end;"
-elseif m==2 then return"if "..genOpaque(false).." then for _=1,10 do local "..v1.."="..obfNum(tostring(n1)).." end end;"
-elseif m==3 then return"if "..genOpaque(false).." then repeat local "..v1.."="..obfNum(tostring(n1)).." until true end;"
-else return"if "..genOpaque(false).." then local function "..v1.."() return "..obfNum(tostring(n1)).." end "..v1.."() end;" end
+if m==1 then return"if "..genOpaque(false).." then local "..v1.."="..obfNum(tostring(n1)).." local "..v2.."="..obfNum(tostring(n2)).." end "
+elseif m==2 then return"if "..genOpaque(false).." then for _=1,10 do local "..v1.."="..obfNum(tostring(n1)).." end end "
+elseif m==3 then return"if "..genOpaque(false).." then repeat local "..v1.."="..obfNum(tostring(n1)).." until true end "
+else return"if "..genOpaque(false).." then local function "..v1.."() return "..obfNum(tostring(n1)).." end "..v1.."() end " end
 end
 
 local function genBloat()
@@ -222,7 +222,9 @@ end
 end
 
 function U:gn(old)
-if not old then return "_nil" end
+if not old then return genName() end
+if type(old)~="string" then return genName() end
+if old=="" then return genName() end
 if GLOBALS[old] then return old end
 if not self.vm[old] then self.vm[old]=genName() end
 return self.vm[old]
@@ -241,62 +243,141 @@ local idx=addConstant(n)
 return"_GN("..obfNum(tostring(idx))..")"
 end
 
-function U:pFuncName(n)
-if not n then return end
-local t=n.AstType
-if t=="VarExpr" then
-self:e(self:gn(n.Name))
-elseif t=="MemberExpr" then
-self:pFuncName(n.Base)
-self:e(n.Indexer or".")
-if n.Ident and n.Ident.Data then
-self:e(n.Ident.Data)
+-- Extract simple name from AST node
+function U:extractName(n)
+if not n then return nil end
+if type(n)=="string" and n~="" then return n end
+if type(n)=="table" then
+if n.Name and type(n.Name)=="string" and n.Name~="" then return n.Name end
+if n.Data and type(n.Data)=="string" and n.Data~="" then return n.Data end
+if n.AstType=="VarExpr" and n.Name then return n.Name end
 end
-elseif t=="IndexExpr" then
-self:pFuncName(n.Base)
-self:e("[")
-self:p(n.Index)
-self:e("]")
-elseif type(n)=="string" then
+return nil
+end
+
+-- Output function name for method-style (a.b, a:c, a[x])
+function U:pFuncName(n)
+if not n then
+self:e(genName())
+return true
+end
+
+if type(n)=="string" then
+if n~="" then
 self:e(self:gn(n))
-elseif n.Name then
-self:e(self:gn(n.Name))
+return true
 else
-self:p(n)
+self:e(genName())
+return true
 end
 end
 
-function U:pFunc(n,isStatement)
-if isStatement then
-if n.IsLocal then
-self:e("local function ")
-if n.Name then
-if type(n.Name)=="table" and n.Name.Name then
-self:e(self:gn(n.Name.Name))
-elseif type(n.Name)=="string" then
-self:e(self:gn(n.Name))
-else
-self:pFuncName(n.Name)
+if type(n)~="table" then
+self:e(genName())
+return true
 end
+
+local t=n.AstType
+
+if t=="VarExpr" then
+local name=n.Name
+if name and type(name)=="string" and name~="" then
+self:e(self:gn(name))
+return true
+else
+self:e(genName())
+return true
+end
+
+elseif t=="MemberExpr" then
+-- Handle: base.ident or base:ident
+if n.Base then
+self:pFuncName(n.Base)
 else
 self:e(genName())
 end
+self:e(n.Indexer or ".")
+if n.Ident then
+local identName=n.Ident.Data or n.Ident.Name or n.Ident
+if type(identName)=="string" and identName~="" then
+self:e(identName)
+else
+self:e("_m"..math.random(1000,9999))
+end
+else
+self:e("_m"..math.random(1000,9999))
+end
+return true
+
+elseif t=="IndexExpr" then
+-- Handle: base[index]
+if n.Base then
+self:pFuncName(n.Base)
+else
+self:e(genName())
+end
+self:e("[")
+if n.Index then
+self:p(n.Index)
+else
+self:e('"_"')
+end
+self:e("]")
+return true
+
+else
+-- Try to extract a name
+local name=self:extractName(n)
+if name then
+self:e(self:gn(name))
+return true
+end
+-- Fallback: generate name
+self:e(genName())
+return true
+end
+end
+
+-- Handle function - both expressions and statements
+function U:pFunc(n, isStatement)
+if isStatement then
+-- Function statement: must have identifier after "function" or "local function"
+if n.IsLocal then
+self:e("local function ")
 else
 self:e("function ")
-if n.Name then
-self:pFuncName(n.Name)
 end
+-- Output the function name (MUST output something)
+local hasName=false
+if n.Name then
+local name=self:extractName(n.Name)
+if name then
+self:e(self:gn(name))
+hasName=true
+elseif type(n.Name)=="table" and n.Name.AstType then
+self:pFuncName(n.Name)
+hasName=true
+end
+end
+if not hasName then
+self:e(genName())
 end
 else
+-- Function expression: anonymous, no name needed
 self:e("function")
 end
+
+-- Arguments
 self:e("(")
-local args=n.Arguments or{}
+local args=n.Arguments or n.ArgList or {}
 for i,a in ipairs(args) do
-if a and a.Name then
-self:e(self:gn(a.Name))
+local argName=self:extractName(a)
+if argName then
+self:e(self:gn(argName))
 elseif type(a)=="string" then
 self:e(self:gn(a))
+else
+self:e(self:gn("_arg"..i))
 end
 if i<#args then self:e(",") end
 end
@@ -305,8 +386,12 @@ if #args>0 then self:e(",") end
 self:e("...")
 end
 self:e(") ")
+
+-- Body with bloat
 self:e(genHeavyBloat())
+if n.Body then
 self:p(n.Body)
+end
 self:e(genBloat())
 self:e(" end ")
 end
@@ -316,23 +401,27 @@ if not n then return end
 local t=n.AstType
 
 if t=="Statlist" then
-for _,s in ipairs(n.Body or{}) do
+local body=n.Body or {}
+for _,s in ipairs(body) do
 self:p(s)
 self:mj()
 end
 
 elseif t=="LocalStatement" then
 self:e("local ")
-local llist=n.LocalList or{}
+local llist=n.LocalList or {}
 for i,v in ipairs(llist) do
-if v and v.Name then
-self:e(self:gn(v.Name))
+local name=self:extractName(v)
+if name then
+self:e(self:gn(name))
 elseif type(v)=="string" then
 self:e(self:gn(v))
+else
+self:e(self:gn("_loc"..i))
 end
 if i<#llist then self:e(",") end
 end
-local ilist=n.InitList or{}
+local ilist=n.InitList or {}
 if #ilist>0 then
 self:e("=")
 for i,x in ipairs(ilist) do
@@ -343,8 +432,8 @@ end
 self:e(" ")
 
 elseif t=="AssignmentStatement" then
-local lhs=n.Lhs or{}
-local rhs=n.Rhs or{}
+local lhs=n.Lhs or {}
+local rhs=n.Rhs or {}
 for i,l in ipairs(lhs) do
 self:p(l)
 if i<#lhs then self:e(",") end
@@ -357,13 +446,17 @@ end
 self:e(" ")
 
 elseif t=="CallStatement" then
+if n.Expression then
 self:p(n.Expression)
+end
 self:e(" ")
 
 elseif t=="CallExpr" then
+if n.Base then
 self:p(n.Base)
+end
 self:e("(")
-local args=n.Arguments or{}
+local args=n.Arguments or {}
 for i,a in ipairs(args) do
 self:p(a)
 if i<#args then self:e(",") end
@@ -371,31 +464,55 @@ end
 self:e(")")
 
 elseif t=="StringCallExpr" then
+if n.Base then
 self:p(n.Base)
+end
 self:e("(")
-for _,a in ipairs(n.Arguments or{}) do self:p(a) end
+for _,a in ipairs(n.Arguments or {}) do self:p(a) end
 self:e(")")
 
 elseif t=="TableCallExpr" then
+if n.Base then
 self:p(n.Base)
+end
 self:e("(")
-for _,a in ipairs(n.Arguments or{}) do self:p(a) end
+for _,a in ipairs(n.Arguments or {}) do self:p(a) end
 self:e(")")
 
 elseif t=="VarExpr" then
-self:e(self:gn(n.Name))
+local name=n.Name
+if name and type(name)=="string" then
+self:e(self:gn(name))
+else
+self:e(self:gn("_var"))
+end
 
 elseif t=="MemberExpr" then
+if n.Base then
 self:p(n.Base)
-self:e(n.Indexer or".")
-if n.Ident and n.Ident.Data then
-self:e(n.Ident.Data)
+end
+self:e(n.Indexer or ".")
+if n.Ident then
+local identName=n.Ident.Data or n.Ident.Name
+if type(identName)=="string" then
+self:e(identName)
+else
+self:e("_")
+end
+else
+self:e("_")
 end
 
 elseif t=="IndexExpr" then
+if n.Base then
 self:p(n.Base)
+end
 self:e("[")
+if n.Index then
 self:p(n.Index)
+else
+self:e("1")
+end
 self:e("]")
 
 elseif t=="StringExpr" then
@@ -403,10 +520,8 @@ local val=""
 if n.Value then
 if type(n.Value)=="string" then
 val=n.Value
-elseif n.Value.Constant then
-val=n.Value.Constant
-elseif n.Value.Data then
-val=n.Value.Data
+elseif type(n.Value)=="table" then
+val=n.Value.Constant or n.Value.Data or ""
 end
 end
 self:e(self:es(val))
@@ -416,11 +531,13 @@ local nv="0"
 if n.Value then
 if type(n.Value)=="string" then
 nv=n.Value
-elseif n.Value.Data then
+elseif type(n.Value)=="table" and n.Value.Data then
 nv=n.Value.Data
+elseif type(n.Value)=="number" then
+nv=tostring(n.Value)
 end
 end
-if nv:match("^%d+$") and tonumber(nv) and tonumber(nv)<50000 then
+if nv:match("^%-?%d+$") and tonumber(nv) and math.abs(tonumber(nv))<50000 then
 self:e(self:en(nv))
 else
 self:e(nv)
@@ -436,36 +553,46 @@ end
 elseif t=="NilExpr" then
 self:e("nil")
 
-elseif t=="Parentheses" then
+elseif t=="Parentheses" or t=="ParenthesesExpr" then
 self:e("(")
+if n.Inner then
 self:p(n.Inner)
+elseif n.Expression then
+self:p(n.Expression)
+end
 self:e(")")
 
-elseif t=="BinopExpr" then
-self:p(n.Lhs)
-self:e(" "..(n.Op or"+").." ")
-self:p(n.Rhs)
+elseif t=="BinopExpr" or t=="BinaryExpr" then
+if n.Lhs then self:p(n.Lhs) end
+self:e(" "..(n.Op or n.Operator or "+").." ")
+if n.Rhs then self:p(n.Rhs) end
 
-elseif t=="UnopExpr" then
-local op=n.Op or"-"
+elseif t=="UnopExpr" or t=="UnaryExpr" then
+local op=n.Op or n.Operator or "-"
 if op=="not" then self:e("not ")
 elseif op=="-" then self:e("-")
 elseif op=="#" then self:e("#")
-else self:e(op) end
+else self:e(op.." ") end
+if n.Rhs then
 self:p(n.Rhs)
+elseif n.Operand then
+self:p(n.Operand)
+end
 
 elseif t=="Function" then
-self:pFunc(n,false)
+-- Anonymous function expression
+self:pFunc(n, false)
 
-elseif t=="FunctionStatement" or t=="FunctionDeclaration" then
-self:pFunc(n,true)
+elseif t=="FunctionStatement" or t=="FunctionDeclaration" or t=="FunctionDeclStatement" then
+-- Named function statement
+self:pFunc(n, true)
 
 elseif t=="IfStatement" then
-local clauses=n.Clauses or{}
+local clauses=n.Clauses or {}
 for i,c in ipairs(clauses) do
 if i==1 then
 self:e("if ")
-self:p(c.Condition)
+if c.Condition then self:p(c.Condition) else self:e("true") end
 self:e(" then ")
 self:e(genBloat())
 elseif c.Condition then
@@ -477,77 +604,83 @@ else
 self:e(" else ")
 self:e(genBloat())
 end
-self:p(c.Body)
+if c.Body then self:p(c.Body) end
 end
 self:e(" end ")
 
 elseif t=="WhileStatement" then
 self:e("while ")
-self:p(n.Condition)
+if n.Condition then self:p(n.Condition) else self:e("true") end
 self:e(" do ")
 self:e(genBloat())
-self:p(n.Body)
+if n.Body then self:p(n.Body) end
 self:e(" end ")
 
 elseif t=="NumericForStatement" then
 self:e("for ")
-if n.Variable and n.Variable.Name then
-self:e(self:gn(n.Variable.Name))
-elseif n.Variable and type(n.Variable)=="string" then
+local varName=self:extractName(n.Variable)
+if varName then
+self:e(self:gn(varName))
+elseif type(n.Variable)=="string" then
 self:e(self:gn(n.Variable))
+else
+self:e(self:gn("_i"))
 end
 self:e("=")
-self:p(n.Start)
+if n.Start then self:p(n.Start) else self:e("1") end
 self:e(",")
-self:p(n.End)
+if n.End then self:p(n.End) else self:e("1") end
 if n.Step then
 self:e(",")
 self:p(n.Step)
 end
 self:e(" do ")
 self:e(genBloat())
-self:p(n.Body)
+if n.Body then self:p(n.Body) end
 self:e(" end ")
 
 elseif t=="GenericForStatement" then
 self:e("for ")
-local vlist=n.VariableList or{}
+local vlist=n.VariableList or {}
 for i,v in ipairs(vlist) do
-if v and v.Name then
-self:e(self:gn(v.Name))
+local name=self:extractName(v)
+if name then
+self:e(self:gn(name))
 elseif type(v)=="string" then
 self:e(self:gn(v))
+else
+self:e(self:gn("_v"..i))
 end
 if i<#vlist then self:e(",") end
 end
 self:e(" in ")
-local gens=n.Generators or{}
+local gens=n.Generators or {}
 for i,g in ipairs(gens) do
 self:p(g)
 if i<#gens then self:e(",") end
 end
 self:e(" do ")
 self:e(genBloat())
-self:p(n.Body)
+if n.Body then self:p(n.Body) end
 self:e(" end ")
 
 elseif t=="RepeatStatement" then
 self:e("repeat ")
 self:e(genBloat())
-self:p(n.Body)
+if n.Body then self:p(n.Body) end
 self:e(" until ")
-self:p(n.Condition)
+if n.Condition then self:p(n.Condition) else self:e("true") end
 self:e(" ")
 
 elseif t=="DoStatement" then
 self:e("do ")
 self:e(genBloat())
-self:p(n.Body)
+if n.Body then self:p(n.Body) end
 self:e(" end ")
 
 elseif t=="ReturnStatement" then
 self:e("return ")
-local args=n.Arguments or{}
+local args=n.Arguments or {}
 for i,a in ipairs(args) do
 self:p(a)
 if i<#args then self:e(",") end
@@ -560,46 +693,57 @@ self:e("break ")
 elseif t=="ContinueStatement" then
 self:e("continue ")
 
-elseif t=="ConstructorExpr" then
+elseif t=="ConstructorExpr" or t=="TableExpr" then
 self:e("{")
-local elist=n.EntryList or{}
+local elist=n.EntryList or n.Fields or {}
 for i,en in ipairs(elist) do
-if en.Type=="Key" then
+local entryType=en.Type or en.EntryType
+if entryType=="Key" then
+self:e("[")
+if en.Key then self:p(en.Key) else self:e("1") end
+self:e("]=")
+if en.Value then self:p(en.Value) else self:e("nil") end
+elseif entryType=="KeyString" then
+if en.Key and type(en.Key)=="string" then
+self:e("["..self:es(en.Key).."]=")
+elseif en.Key then
 self:e("[")
 self:p(en.Key)
 self:e("]=")
-self:p(en.Value)
-elseif en.Type=="KeyString" then
-if en.Key then
-self:e("["..self:es(en.Key).."]=")
 end
-self:p(en.Value)
-elseif en.Type=="Value" then
-self:p(en.Value)
+if en.Value then self:p(en.Value) else self:e("nil") end
+elseif entryType=="Value" then
+if en.Value then self:p(en.Value) end
 else
-self:p(en.Value)
+-- Default: just output value
+if en.Value then self:p(en.Value) end
 end
 if i<#elist then self:e(",") end
 end
 self:e("}")
 
-elseif t=="DotsExpr" or t=="VarargExpr" then
+elseif t=="DotsExpr" or t=="VarargExpr" or t=="VarargsExpr" then
 self:e("...")
 
 elseif t=="Eof" then
 -- ignore
 
 elseif t=="LabelStatement" then
-if n.Label then
-self:e("::"..n.Label..":: ")
+local label=n.Label
+if type(label)=="table" then label=label.Data or label.Name end
+if label and type(label)=="string" then
+self:e("::"..label..":: ")
 end
 
 elseif t=="GotoStatement" then
-if n.Label then
-self:e("goto "..n.Label.." ")
+local label=n.Label
+if type(label)=="table" then label=label.Data or label.Name end
+if label and type(label)=="string" then
+self:e("goto "..label.." ")
 end
 
 else
+-- Unknown AST type - warn in debug mode
 if DEBUG_MODE then
 io.stderr:write("[WARN] Unhandled AST type: "..(t or "nil").."\n")
 end
@@ -736,11 +880,12 @@ w=w.." end "
 return w
 end
 
+-- Main
 local fn=arg[1]
-if not fn then print("-- ERROR: No input") return end
+if not fn then print("-- ERROR: No input file specified") return end
 
 local f=io.open(fn,"rb")
-if not f then print("-- ERROR: Cannot open") return end
+if not f then print("-- ERROR: Cannot open file: "..fn) return end
 local code=f:read("*a")
 f:close()
 
@@ -771,13 +916,13 @@ final=final..genMassiveBloat()
 
 if DEBUG_MODE then
 print("--[[ =============================== ]]")
-print("--[[ OBFUSCATOR ENGINE V6 - FIXED   ]]")
+print("--[[ OBFUSCATOR ENGINE V7 - FIXED   ]]")
 print("--[[ =============================== ]]")
 print("--[[ VMKEY: "..VMKEY.." ]]")
-print("--[[ Strings Collected: "..#stringTable.." ]]")
-print("--[[ Constants Collected: "..#constantTable.." ]]")
-print("--[[ Body Size: "..#body.." bytes ]]")
-print("--[[ Final Size: "..#final.." bytes ]]")
+print("--[[ Strings: "..#stringTable.." ]]")
+print("--[[ Constants: "..#constantTable.." ]]")
+print("--[[ Body: "..#body.." bytes ]]")
+print("--[[ Final: "..#final.." bytes ]]")
 print("--[[ =============================== ]]")
 print("")
 print(final)
