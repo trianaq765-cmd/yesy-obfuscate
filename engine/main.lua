@@ -2,7 +2,7 @@ package.path=package.path..";./?.lua;./engine/?.lua;/app/engine/?.lua"
 local parser=require("parser")
 math.randomseed(os.time())
 
-local DEBUG_MODE = false
+local DEBUG_MODE = true
 local usedNames = {}
 local stringTable = {}
 local constantTable = {}
