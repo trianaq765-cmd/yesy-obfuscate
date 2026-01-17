@@ -2,13 +2,14 @@ package.path=package.path..";./?.lua;./engine/?.lua;/app/engine/?.lua"
 local parser=require("parser")
 math.randomseed(os.time())
 
-local DEBUG_MODE=false
+-- CONFIG
+local JUNK_INTENSITY = 15 -- Semakin tinggi, semakin besar file (Luraph style)
+local VMKEY = math.random(50, 200)
+
 local usedNames={}
 local stringTable={}
 local constantTable={}
-local VMKEY=math.random(50,200)
 
--- Globals list to prevent renaming built-ins
 local GLOBALS={
 ["print"]=1,["warn"]=1,["error"]=1,["pairs"]=1,["ipairs"]=1,["next"]=1,
 ["tonumber"]=1,["tostring"]=1,["type"]=1,["pcall"]=1,["xpcall"]=1,
@@ -47,7 +48,7 @@ local GLOBALS={
 ["true"]=1,["false"]=1,["nil"]=1
 }
 
--- === UTILITIES === --
+-- === GENERATORS === --
 
 local function genName()
     local cs={"I","l","1","_"}
@@ -84,15 +85,17 @@ local function obfNum(ns)
     local n=tonumber(ns)
     if not n then return ns end
     if n~=math.floor(n) then return ns end
-    if n<0 or n>50000 then return ns end
+    if n<0 or n>999999 then return ns end
     if n==0 then return"((1)-(1))" end
     if n==1 then return"((2)-(1))" end
-    local m=math.random(1,4)
+    
+    local m=math.random(1,5)
     local a=math.random(1,100)
     if m==1 then return"(("..(n+a)..")-("..a.."))"
     elseif m==2 then return"(("..(n-a)..")+("..a.."))"
     elseif m==3 then return"("..math.floor(n/2).."+"..(n-math.floor(n/2))..")"
-    else return"(("..a.."+"..(n-a).."))" end
+    elseif m==4 then return"(("..a.."+"..(n-a).."))"
+    else return"(("..(n*2)..")/2)" end
 end
 
 local function genOpaque(t)
@@ -100,30 +103,29 @@ local function genOpaque(t)
     if t then return "("..a.."<"..b..")" else return "("..b.."<"..a..")" end
 end
 
--- Safe Junk Generator (No blocks, just statements)
+-- AMAN: Junk code hanya berupa variable definition lokal yang tidak mempengaruhi logic
 local function genJunk()
     local v=genJunkVar()
     local n=math.random(100,9999)
     return "local "..v.."="..obfNum(tostring(n))..";"
 end
 
+-- AMAN: Block tertutup
+local function genSafeBlock()
+    local v=genJunkVar()
+    return "do local "..v.."="..obfNum(tostring(math.random(1,100))).." end "
+end
+
+-- GENERATE MASSIVE BLOAT (Untuk memperbesar ukuran file)
 local function genBloat()
     local b=""
-    for i=1,math.random(10,20) do
-        b=b..genJunk()
+    for i=1,math.random(5, JUNK_INTENSITY) do
+        if math.random(1,2)==1 then b=b..genJunk() else b=b..genSafeBlock() end
     end
     return b
 end
 
-local function genMassiveBloat()
-    local b=""
-    for i=1,math.random(30,50) do
-        b=b..genJunk()
-    end
-    return b
-end
-
--- === VM TABLES === --
+-- === VM REGISTRY === --
 
 local function addString(s)
     if not s then return nil end
@@ -144,7 +146,7 @@ local function addConstant(n)
     return idx
 end
 
--- === UNPARSER CLASS === --
+-- === UNPARSER === --
 
 local U={}
 function U:new()
@@ -165,18 +167,17 @@ end
 function U:es(s)
     if not s or s=="" then return'""' end
     local idx=addString(s)
-    if not idx then return '""' end
     return "_S["..obfNum(tostring(idx)).."]"
 end
 
 function U:en(ns)
     local n=tonumber(ns)
-    if not n or n~=math.floor(n) or n<0 or n>50000 then return obfNum(ns) end
+    if not n or n~=math.floor(n) or n<0 or n>999999 then return obfNum(ns) end
     local idx=addConstant(n)
     return "_N["..obfNum(tostring(idx)).."]"
 end
 
--- Main Processing Function
+-- PROCESS AST
 function U:p(n)
     if not n then return end
     local t=n.AstType
@@ -184,7 +185,7 @@ function U:p(n)
     if t=="Statlist" then
         for _,s in ipairs(n.Body) do
             self:p(s)
-            self:e(genJunk()) -- Insert junk between every statement
+            self:e(genBloat()) -- Massive bloat between lines
         end
 
     elseif t=="LocalStatement" then
@@ -209,35 +210,23 @@ function U:p(n)
         self:e(" ")
 
     elseif t=="CallStatement" then
-        self:p(n.Expression)
-        self:e(" ")
+        self:p(n.Expression) self:e(" ")
 
     elseif t=="CallExpr" then
-        -- MEMBER METHOD HIDING: obj:Method(args) -> (function(o,...) return o["Method"](o,...) end)(obj, args)
+        -- SAFE METHOD HIDING: obj:Name(...) -> obj["Name"](obj, ...)
         if n.Base.AstType == "MemberExpr" and n.Base.Indexer == ":" then
-            local obj = n.Base.Base
-            local method = n.Base.Ident.Data
-            local wrapVar = genJunkVar()
-            
-            self:e("(function("..wrapVar)
-            if #n.Arguments > 0 then self:e(",...") end
-            self:e(") return "..wrapVar.."["..self:es(method).."]("..wrapVar)
-            if #n.Arguments > 0 then self:e(",...") end
-            self:e(") end)(")
-            self:p(obj)
-            for i,a in ipairs(n.Arguments) do
-                self:e(",")
-                self:p(a)
-            end
+            self:p(n.Base.Base)
+            self:e("[")
+            self:e(self:es(n.Base.Ident.Data)) -- Encrypt Method Name
+            self:e("](")
+            self:p(n.Base.Base) -- Pass Self
+            if #n.Arguments > 0 then self:e(",") end
+            for i,a in ipairs(n.Arguments) do self:p(a) if i<#n.Arguments then self:e(",") end end
             self:e(")")
         else
-            -- Standard Call
             self:p(n.Base)
             self:e("(")
-            for i,a in ipairs(n.Arguments) do
-                self:p(a)
-                if i<#n.Arguments then self:e(",") end
-            end
+            for i,a in ipairs(n.Arguments) do self:p(a) if i<#n.Arguments then self:e(",") end end
             self:e(")")
         end
 
@@ -251,10 +240,10 @@ function U:p(n)
         self:e(self:gn(n.Name))
 
     elseif t=="MemberExpr" then
-        -- PROPERTY HIDING: obj.Name -> obj["Name"]
+        -- HIDE PROPERTIES: obj.Prop -> obj["Prop"]
         self:p(n.Base)
         self:e("[")
-        self:e(self:es(n.Ident.Data))
+        self:e(self:es(n.Ident.Data)) -- Encrypt Property Name
         self:e("]")
 
     elseif t=="IndexExpr" then
@@ -265,7 +254,7 @@ function U:p(n)
 
     elseif t=="NumberExpr" then
         local nv=n.Value.Data
-        if nv:match("^%d+$") and tonumber(nv)<50000 then self:e(self:en(nv)) else self:e(nv) end
+        if nv:match("^%d+$") then self:e(self:en(nv)) else self:e(nv) end
 
     elseif t=="BooleanExpr" then
         if n.Value then self:e("true") else self:e("false") end
@@ -276,7 +265,17 @@ function U:p(n)
         self:e("(") self:p(n.Inner) self:e(")")
 
     elseif t=="BinopExpr" then
-        self:p(n.Lhs) self:e(" "..n.Op.." ") self:p(n.Rhs)
+        -- VIRTUALIZE ARITHMETIC
+        local opMap={["+"]="_ADD",["-"]="_SUB",["*"]="_MUL",["/"]="_DIV",["^"]="_POW"}
+        if opMap[n.Op] then
+            self:e("_VM."..opMap[n.Op].."(")
+            self:p(n.Lhs)
+            self:e(",")
+            self:p(n.Rhs)
+            self:e(")")
+        else
+            self:p(n.Lhs) self:e(" "..n.Op.." ") self:p(n.Rhs)
+        end
 
     elseif t=="UnopExpr" then
         self:e((n.Op=="not" and "not " or n.Op)) self:p(n.Rhs)
@@ -290,40 +289,40 @@ function U:p(n)
         for i,a in ipairs(n.Arguments) do self:e(self:gn(a.Name)) if i<#n.Arguments then self:e(",") end end
         if n.VarArg then if #n.Arguments>0 then self:e(",") end self:e("...") end
         self:e(") ")
-        self:e(genBloat())
+        self:e(genBloat()) -- Junk inside function body
         self:p(n.Body)
         self:e("end ")
 
     elseif t=="IfStatement" then
         for i,c in ipairs(n.Clauses) do
-            if i==1 then self:e("if ") self:p(c.Condition) self:e(" then ") self:e(genJunk())
-            elseif c.Condition then self:e("elseif ") self:p(c.Condition) self:e(" then ") self:e(genJunk())
-            else self:e("else ") self:e(genJunk()) end
+            if i==1 then self:e("if ") self:p(c.Condition) self:e(" then ") self:e(genBloat())
+            elseif c.Condition then self:e("elseif ") self:p(c.Condition) self:e(" then ") self:e(genBloat())
+            else self:e("else ") self:e(genBloat()) end
             self:p(c.Body)
         end
         self:e("end ")
 
     elseif t=="WhileStatement" then
-        self:e("while ") self:p(n.Condition) self:e(" do ") self:e(genJunk()) self:p(n.Body) self:e("end ")
+        self:e("while ") self:p(n.Condition) self:e(" do ") self:e(genBloat()) self:p(n.Body) self:e("end ")
 
     elseif t=="NumericForStatement" then
         self:e("for "..self:gn(n.Variable.Name).."=")
         self:p(n.Start) self:e(",") self:p(n.End)
         if n.Step then self:e(",") self:p(n.Step) end
-        self:e(" do ") self:e(genJunk()) self:p(n.Body) self:e("end ")
+        self:e(" do ") self:e(genBloat()) self:p(n.Body) self:e("end ")
 
     elseif t=="GenericForStatement" then
         self:e("for ")
         for i,v in ipairs(n.VariableList) do self:e(self:gn(v.Name)) if i<#n.VariableList then self:e(",") end end
         self:e(" in ")
         for i,g in ipairs(n.Generators) do self:p(g) if i<#n.Generators then self:e(",") end end
-        self:e(" do ") self:e(genJunk()) self:p(n.Body) self:e("end ")
+        self:e(" do ") self:e(genBloat()) self:p(n.Body) self:e("end ")
 
     elseif t=="RepeatStatement" then
-        self:e("repeat ") self:e(genJunk()) self:p(n.Body) self:e("until ") self:p(n.Condition) self:e(" ")
+        self:e("repeat ") self:e(genBloat()) self:p(n.Body) self:e("until ") self:p(n.Condition) self:e(" ")
 
     elseif t=="DoStatement" then
-        self:e("do ") self:e(genJunk()) self:p(n.Body) self:e("end ")
+        self:e("do ") self:e(genBloat()) self:p(n.Body) self:e("end ")
 
     elseif t=="ReturnStatement" then
         self:e("return ")
@@ -338,7 +337,7 @@ function U:p(n)
             if en.Type=="Key" then
                 self:e("[") self:p(en.Key) self:e("]=") self:p(en.Value)
             elseif en.Type=="KeyString" then
-                -- ENCRYPT TABLE KEYS HERE
+                -- ENCRYPT KEYS
                 self:e("[") self:e(self:es(en.Key)) self:e("]=") self:p(en.Value)
             else
                 self:p(en.Value)
@@ -348,6 +347,7 @@ function U:p(n)
         self:e("}")
 
     elseif t=="DotsExpr" then self:e("...")
+    elseif t=="Eof" then
     elseif t=="LabelStatement" then self:e("::"..n.Label..":: ")
     elseif t=="GotoStatement" then self:e("goto "..n.Label.." ")
     end
@@ -357,8 +357,15 @@ end
 
 local function buildRuntime()
     local r={}
-    r[#r+1]="local _X=function(a,b) local r,m=0,1 while a>0 or b>0 do local x,y=a%2,b%2 if x~=y then r=r+m end a=math.floor(a/2) b=math.floor(b/2) m=m*2 end return r end "
-    r[#r+1]="local _D=function(t,k) local r={} for i=1,#t do r[i]=string.char(_X(t[i],k)) end return table.concat(r) end "
+    r[#r+1]="local _VM={} "
+    r[#r+1]="_VM.X=function(a,b) local r,m=0,1 while a>0 or b>0 do local x,y=a%2,b%2 if x~=y then r=r+m end a=math.floor(a/2) b=math.floor(b/2) m=m*2 end return r end "
+    r[#r+1]="_VM.D=function(t,k) local r={} for i=1,#t do r[i]=string.char(_VM.X(t[i],k)) end return table.concat(r) end "
+    -- VM ARITHMETIC
+    r[#r+1]="_VM._ADD=function(a,b) return a+b end "
+    r[#r+1]="_VM._SUB=function(a,b) return a-b end "
+    r[#r+1]="_VM._MUL=function(a,b) return a*b end "
+    r[#r+1]="_VM._DIV=function(a,b) return a/b end "
+    r[#r+1]="_VM._POW=function(a,b) return a^b end "
     return table.concat(r)
 end
 
@@ -368,11 +375,11 @@ local function buildStringTable()
     for i=1,#stringTable do
         local s=stringTable[i]
         local encStr="{"
-        for j,v in ipairs(s.enc) do encStr=encStr..obfNum(tostring(v)).."," end
+        for j,v in ipairs(s.enc) do encStr=encStr..v.."," end
         encStr=encStr:sub(1,-2).."}"
         r[#r+1]="_ST["..obfNum(tostring(i)).."]="..encStr.." "
     end
-    r[#r+1]="local _S=setmetatable({},{__index=function(_,k) local t=_ST[k] if t then return _D(t,"..obfNum(tostring(VMKEY))..") end return '' end}) "
+    r[#r+1]="local _S=setmetatable({},{__index=function(_,k) local t=_ST[k] if t then return _VM.D(t,"..obfNum(tostring(VMKEY))..") end return '' end}) "
     return table.concat(r)
 end
 
@@ -387,17 +394,27 @@ local function buildConstantTable()
     return table.concat(r)
 end
 
--- === WRAPPERS === --
+local function genFakeData()
+    local d={}
+    d[#d+1]="local _MEM={} "
+    -- Buat 500+ entri sampah untuk bloat size
+    for i=1,math.random(500,800) do
+        local s=""
+        for j=1,math.random(10,20) do s=s..string.char(math.random(65,90)) end
+        d[#d+1]="_MEM["..i.."]='"..s.."' "
+    end
+    return table.concat(d)
+end
 
 local function genAntiTamper()
     local a=""
-    a=a.."if rawget(_G,'__DEOBF') or rawget(_G,'__DEBUG') then while true do end end "
+    a=a.."if rawget(_G,'__DEOBF') then while true do end end "
     return a
 end
 
 local function wrapCode(code)
     local fn=genName()
-    return "local function "..fn.."() "..genMassiveBloat()..code..genMassiveBloat().." end "..fn.."() "
+    return "local function "..fn.."() "..genBloat()..code..genBloat().." end "..fn.."() "
 end
 
 -- === MAIN === --
@@ -416,16 +433,13 @@ local u=U:new()
 u:p(ast)
 
 local runtime=buildRuntime()
+local fake=genFakeData()
 local strTable=buildStringTable()
 local constTable=buildConstantTable()
 local antiTamper=genAntiTamper()
 local body=u.out
 local wrapped=wrapCode(body)
 
-local final=runtime..strTable..constTable..antiTamper..genMassiveBloat()..wrapped..genMassiveBloat()
-
-if DEBUG_MODE then
-    io.stderr:write("\n[DEBUG] Final Size: "..#final.."\n")
-end
+local final=runtime..fake..strTable..constTable..antiTamper..genBloat()..wrapped..genBloat()
 
 print(final)
