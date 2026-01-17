@@ -47,11 +47,11 @@ local GLOBALS = {
 }
 
 local function genName()
-    local cs = {"I", "l", "1", "_"}
+    local cs = {"I", "l", "O", "_"}
     local n
     repeat 
         n = "_" 
-        for i = 1, math.random(12, 20) do 
+        for i = 1, math.random(10, 16) do 
             n = n .. cs[math.random(1, 4)] 
         end 
     until not usedNames[n]
@@ -67,11 +67,29 @@ local function genJunkVar()
     return n
 end
 
-local function xorEnc(s, k)
+-- Simple XOR dengan key tunggal
+local function xorByte(b, k)
+    -- Manual XOR implementation
+    local result = 0
+    local power = 1
+    for i = 0, 7 do
+        local b1 = math.floor(b / power) % 2
+        local b2 = math.floor(k / power) % 2
+        if b1 ~= b2 then
+            result = result + power
+        end
+        power = power * 2
+    end
+    return result
+end
+
+-- Encode string ke array of XORed bytes
+local function encodeString(s, key)
     local r = {}
     for i = 1, #s do
         local b = string.byte(s, i)
-        r[#r + 1] = bit32 and bit32.bxor(b, k) or ((b + k) % 256)
+        local k = ((key + i) % 256)  -- Vary key per position
+        r[i] = xorByte(b, k)
     end
     return r
 end
@@ -91,58 +109,44 @@ local function obfNum(ns)
 end
 
 local function genOpaque(t)
-    local a, b = math.random(100, 500), math.random(501, 999)
     if t then
-        local m = math.random(1, 3)
-        if m == 1 then return "(" .. a .. "<" .. b .. ")"
-        elseif m == 2 then return "(type('')=='string')"
-        else return "(#''==0)" end
+        return "(1<2)"
     else
-        return "(" .. b .. "<" .. a .. ")"
+        return "(2<1)"
     end
 end
 
--- SAFE bloat - hanya local assignments, tidak ada nested blocks
 local function genSafeJunk()
-    local v = genJunkVar()
-    local n = math.random(100, 9999)
-    local m = math.random(1, 5)
-    if m == 1 then 
-        return "local " .. v .. "=" .. obfNum(tostring(n)) .. " "
-    elseif m == 2 then 
-        return "local " .. v .. "=" .. obfNum(tostring(n)) .. "+" .. obfNum(tostring(math.random(1, 100))) .. " "
-    elseif m == 3 then 
-        return "local " .. v .. "={} "
-    elseif m == 4 then
-        return "local " .. v .. "=" .. genOpaque(true) .. " and " .. obfNum(tostring(n)) .. " or 0 "
-    else
-        return "local " .. v .. " " .. v .. "=" .. obfNum(tostring(n)) .. " "
-    end
-end
-
--- SAFE bloat dengan blocks yang PASTI balanced
-local function genSafeBlock()
     local v = genJunkVar()
     local n = math.random(100, 9999)
     local m = math.random(1, 4)
     if m == 1 then 
-        -- Simple do block
-        return "do local " .. v .. "=" .. obfNum(tostring(n)) .. " end "
-    elseif m == 2 then
-        -- If true then (always executes, safe)
-        return "if " .. genOpaque(true) .. " then local " .. v .. "=" .. obfNum(tostring(n)) .. " end "
+        return "local " .. v .. "=" .. n .. " "
+    elseif m == 2 then 
+        return "local " .. v .. "={} "
     elseif m == 3 then
-        -- For loop that runs 0 times
-        return "for " .. v .. "=1,0 do end "
+        return "local " .. v .. "=" .. n .. "+" .. math.random(1, 100) .. " "
     else
-        -- While false (never runs)
-        return "while " .. genOpaque(false) .. " do break end "
+        return "local " .. v .. " " .. v .. "=" .. n .. " "
+    end
+end
+
+local function genSafeBlock()
+    local v = genJunkVar()
+    local n = math.random(100, 9999)
+    local m = math.random(1, 3)
+    if m == 1 then 
+        return "do local " .. v .. "=" .. n .. " end "
+    elseif m == 2 then
+        return "if (1<2) then local " .. v .. "=" .. n .. " end "
+    else
+        return "for " .. v .. "=1,0 do end "
     end
 end
 
 local function genBloat()
     local b = ""
-    for i = 1, math.random(3, 6) do
+    for i = 1, math.random(2, 4) do
         if math.random(1, 3) == 1 then
             b = b .. genSafeBlock()
         else
@@ -154,19 +158,7 @@ end
 
 local function genHeavyBloat()
     local b = ""
-    for i = 1, math.random(6, 10) do
-        if math.random(1, 3) == 1 then
-            b = b .. genSafeBlock()
-        else
-            b = b .. genSafeJunk()
-        end
-    end
-    return b
-end
-
-local function genMassiveBloat()
-    local b = ""
-    for i = 1, math.random(10, 15) do
+    for i = 1, math.random(4, 6) do
         if math.random(1, 3) == 1 then
             b = b .. genSafeBlock()
         else
@@ -182,7 +174,7 @@ local function addString(s)
         if v.orig == s then return k end 
     end
     local idx = #stringTable + 1
-    stringTable[idx] = {orig = s, enc = xorEnc(s, VMKEY)}
+    stringTable[idx] = {orig = s, enc = encodeString(s, VMKEY)}
     return idx
 end
 
@@ -210,7 +202,7 @@ function U:new()
         out = "",
         jc = 0,
         ji = math.random(3, 5),
-        inExpr = false  -- Track if we're inside an expression
+        inExpr = false
     }
     setmetatable(o, self)
     self.__index = self
@@ -242,19 +234,18 @@ end
 function U:es(s)
     if not s or s == "" then return '""' end
     local idx = addString(s)
-    return "_GS(" .. obfNum(tostring(idx)) .. ")"
+    return "_S(" .. idx .. ")"
 end
 
 function U:en(ns)
     local n = tonumber(ns)
     if not n or n ~= math.floor(n) or n < 0 or n > 50000 then 
-        return obfNum(tostring(ns)) 
+        return tostring(ns) 
     end
     local idx = addConstant(n)
-    return "_GN(" .. obfNum(tostring(idx)) .. ")"
+    return "_N(" .. idx .. ")"
 end
 
--- Get simple name from node
 function U:getName(n)
     if not n then return nil end
     if type(n) == "string" and n ~= "" then return n end
@@ -266,7 +257,6 @@ function U:getName(n)
     return nil
 end
 
--- Output function name (for complex names like a.b, a:c)
 function U:outFuncName(n)
     if not n then return false end
     
@@ -315,7 +305,6 @@ function U:outFuncName(n)
         return true
     end
     
-    -- Try to get simple name
     local name = self:getName(n)
     if name then
         self:e(self:gn(name))
@@ -325,7 +314,6 @@ function U:outFuncName(n)
     return false
 end
 
--- Process expression (NEVER outputs statements with function names)
 function U:pExpr(n)
     if not n then 
         self:e("nil")
@@ -370,7 +358,7 @@ function U:pExpr(n)
         if name and type(name) == "string" then
             self:e(self:gn(name))
         else
-            self:e("_v")
+            self:e("nil")
         end
 
     elseif t == "DotsExpr" or t == "VarargExpr" or t == "VarargsExpr" then
@@ -428,7 +416,6 @@ function U:pExpr(n)
         self:pExpr(n.Rhs or n.Operand)
 
     elseif t == "Function" or t == "FunctionExpr" then
-        -- ALWAYS anonymous when in expression context
         self:e("function(")
         local args = n.Arguments or n.ArgList or {}
         for i, a in ipairs(args) do
@@ -469,14 +456,12 @@ function U:pExpr(n)
         self:e("}")
 
     else
-        -- Fallback
         self:e("nil")
     end
     
     self.inExpr = oldInExpr
 end
 
--- Process statement
 function U:p(n)
     if not n then return end
     
@@ -500,7 +485,7 @@ function U:p(n)
         if #ilist > 0 then
             self:e("=")
             for i, x in ipairs(ilist) do
-                self:pExpr(x)  -- Use pExpr for init values!
+                self:pExpr(x)
                 if i < #ilist then self:e(",") end
             end
         end
@@ -515,7 +500,7 @@ function U:p(n)
         self:e("=")
         local rhs = n.Rhs or {}
         for i, r in ipairs(rhs) do
-            self:pExpr(r)  -- Use pExpr for rhs values!
+            self:pExpr(r)
             if i < #rhs then self:e(",") end
         end
         self:e(" ")
@@ -527,10 +512,7 @@ function U:p(n)
         self:e(" ")
 
     elseif t == "Function" and not self.inExpr then
-        -- Function at statement level but might be expression
-        -- Check if it has a name - if not, this shouldn't be here
         if n.Name or n.IsLocal then
-            -- It's a function statement
             if n.IsLocal then
                 self:e("local function ")
             else
@@ -560,14 +542,12 @@ function U:p(n)
             self:e(genBloat())
             self:e(" end ")
         else
-            -- Anonymous function at statement level - wrap in do block
             self:e("do local _ = ")
             self:pExpr(n)
             self:e(" end ")
         end
 
     elseif t == "FunctionStatement" or t == "FunctionDeclaration" or t == "FunctionDeclStatement" then
-        -- Explicit function statement
         if n.IsLocal then
             self:e("local function ")
         else
@@ -707,91 +687,94 @@ function U:p(n)
 
     elseif t == "Eof" then
         -- ignore
-
-    else
-        if DEBUG_MODE then
-            io.stderr:write("[WARN] Unknown statement type: " .. (t or "nil") .. "\n")
-        end
     end
 end
 
 -- ============================================
--- RUNTIME BUILDERS
+-- RUNTIME - XOR harus SAMA dengan encoder
 -- ============================================
 local function buildRuntime()
     local r = {}
-    r[#r + 1] = "local _VM={} "
-    r[#r + 1] = genBloat()
-    r[#r + 1] = "_VM.X=function(a,b) local r=0 local m=1 while a>0 or b>0 do local x=a%2 local y=b%2 if x~=y then r=r+m end a=math.floor(a/2) b=math.floor(b/2) m=m*2 end return r end "
-    r[#r + 1] = genBloat()
-    r[#r + 1] = "_VM.D=function(t,k) local r={} for i=1,#t do r[i]=string.char(_VM.X(t[i],k)) end return table.concat(r) end "
-    r[#r + 1] = genBloat()
+    
+    -- XOR function - SAMA dengan xorByte di atas
+    r[#r + 1] = "local function _X(b,k) "
+    r[#r + 1] = "local r=0 local p=1 "
+    r[#r + 1] = "for i=0,7 do "
+    r[#r + 1] = "local b1=math.floor(b/p)%2 "
+    r[#r + 1] = "local b2=math.floor(k/p)%2 "
+    r[#r + 1] = "if b1~=b2 then r=r+p end "
+    r[#r + 1] = "p=p*2 "
+    r[#r + 1] = "end "
+    r[#r + 1] = "return r "
+    r[#r + 1] = "end "
+    
     return table.concat(r)
 end
 
 local function buildStringTable()
     local r = {}
-    r[#r + 1] = "_VM.ST={} "
+    local key = VMKEY
+    
+    r[#r + 1] = "local _ST={} "
+    
     for i = 1, #stringTable do
         local s = stringTable[i]
         if s and s.enc then
             local encStr = "{"
             for j, v in ipairs(s.enc) do
-                encStr = encStr .. obfNum(tostring(v))
+                encStr = encStr .. v
                 if j < #s.enc then encStr = encStr .. "," end
             end
             encStr = encStr .. "}"
-            r[#r + 1] = "_VM.ST[" .. obfNum(tostring(i)) .. "]=" .. encStr .. " "
+            r[#r + 1] = "_ST[" .. i .. "]=" .. encStr .. " "
         end
     end
-    r[#r + 1] = genBloat()
-    r[#r + 1] = "local function _GS(k) local t=_VM.ST[k] if t then return _VM.D(t," .. obfNum(tostring(VMKEY)) .. ") end return '' end "
-    r[#r + 1] = genBloat()
+    
+    -- Decode function - key varies per position, SAMA dengan encodeString
+    r[#r + 1] = "local function _S(i) "
+    r[#r + 1] = "local t=_ST[i] "
+    r[#r + 1] = "if not t then return '' end "
+    r[#r + 1] = "local r={} "
+    r[#r + 1] = "for j=1,#t do "
+    r[#r + 1] = "local k=((" .. key .. "+j)%256) "  -- SAMA dengan encoder
+    r[#r + 1] = "r[j]=string.char(_X(t[j],k)) "
+    r[#r + 1] = "end "
+    r[#r + 1] = "return table.concat(r) "
+    r[#r + 1] = "end "
+    
     return table.concat(r)
 end
 
 local function buildConstantTable()
     local r = {}
-    r[#r + 1] = "_VM.CT={} "
+    
+    r[#r + 1] = "local _CT={} "
+    
     for i = 1, #constantTable do
         local c = constantTable[i]
         if c then
-            r[#r + 1] = "_VM.CT[" .. obfNum(tostring(i)) .. "]={v=" .. obfNum(tostring(c.val)) .. ",o=" .. obfNum(tostring(c.off)) .. "} "
+            r[#r + 1] = "_CT[" .. i .. "]={" .. c.val .. "," .. c.off .. "} "
         end
     end
-    r[#r + 1] = genBloat()
-    r[#r + 1] = "local function _GN(k) local c=_VM.CT[k] if c then return c.v-c.o end return 0 end "
-    r[#r + 1] = genBloat()
+    
+    r[#r + 1] = "local function _N(i) "
+    r[#r + 1] = "local c=_CT[i] "
+    r[#r + 1] = "if c then return c[1]-c[2] end "
+    r[#r + 1] = "return 0 "
+    r[#r + 1] = "end "
+    
     return table.concat(r)
 end
 
-local function genAntiTamper()
-    local a = {}
-    a[#a + 1] = "do "
-    a[#a + 1] = genBloat()
-    a[#a + 1] = "if rawget(_G,'__DEOBF') then while true do end end "
-    a[#a + 1] = "if rawget(_G,'__DEBUG') then return end "
-    a[#a + 1] = genBloat()
-    a[#a + 1] = "end "
-    return table.concat(a)
-end
-
 local function wrapCode(code)
-    local fn1 = genName()
-    local fn2 = genName()
+    local fn = genName()
     local w = ""
-    w = w .. "local function " .. fn1 .. "() "
-    w = w .. genMassiveBloat()
-    w = w .. "local function " .. fn2 .. "() "
-    w = w .. genBloat()
+    w = w .. "local function " .. fn .. "() "
+    w = w .. genHeavyBloat()
     w = w .. code
     w = w .. genBloat()
     w = w .. " end "
-    w = w .. genBloat()
-    w = w .. "return " .. fn2 .. "() "
-    w = w .. " end "
-    w = w .. genBloat()
-    w = w .. fn1 .. "() "
+    w = w .. fn .. "() "
     return w
 end
 
@@ -801,7 +784,6 @@ end
 local fn = arg[1]
 if not fn then 
     print("-- ERROR: No input file")
-    print("-- Usage: lua obfuscator.lua <input.lua>")
     return 
 end
 
@@ -825,7 +807,6 @@ u:p(ast)
 local runtime = buildRuntime()
 local strTable = buildStringTable()
 local constTable = buildConstantTable()
-local antiTamper = genAntiTamper()
 local body = u.out
 
 local wrapped = wrapCode(body)
@@ -834,16 +815,29 @@ local final = ""
 final = final .. runtime
 final = final .. strTable
 final = final .. constTable
-final = final .. antiTamper
-final = final .. genMassiveBloat()
+final = final .. genBloat()
 final = final .. wrapped
 
 if DEBUG_MODE then
-    io.stderr:write("\n")
     io.stderr:write("-- VMKEY: " .. VMKEY .. "\n")
     io.stderr:write("-- Strings: " .. #stringTable .. "\n")
-    io.stderr:write("-- Constants: " .. #constantTable .. "\n")
     io.stderr:write("-- Output: " .. #final .. " bytes\n")
+    
+    -- Test decode
+    io.stderr:write("\n-- String decode test:\n")
+    for i = 1, math.min(3, #stringTable) do
+        local s = stringTable[i]
+        if s then
+            io.stderr:write("-- [" .. i .. "] Original: " .. s.orig:sub(1, 30) .. "\n")
+            -- Verify decode
+            local dec = {}
+            for j, v in ipairs(s.enc) do
+                local k = ((VMKEY + j) % 256)
+                dec[j] = string.char(xorByte(v, k))
+            end
+            io.stderr:write("-- [" .. i .. "] Decoded:  " .. table.concat(dec):sub(1, 30) .. "\n")
+        end
+    end
 end
 
 print(final)
